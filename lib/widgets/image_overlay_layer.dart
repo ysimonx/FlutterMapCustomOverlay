@@ -2,6 +2,7 @@ import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../models/image_overlay.dart';
 
 /// Widget personnalisé pour afficher une image overlay sur une carte flutter_map.
@@ -216,7 +217,7 @@ class ImageOverlayPainter extends CustomPainter {
         ..color = Colors.blue
         ..style = PaintingStyle.fill;
 
-      final handleRadius = 10.0;
+      const handleRadius = 10.0;
 
       // Coins
       canvas.drawCircle(
@@ -265,6 +266,117 @@ class ImageOverlayPainter extends CustomPainter {
         handleRadius * 0.7,
         middleHandlePaint,
       );
+
+      // Afficher les coordonnées géographiques aux 4 coins
+      _drawCornerCoordinates(canvas, dstRect, finalRotationDegrees, finalScale);
+    }
+
+    canvas.restore();
+  }
+
+  /// Dessine les coordonnées géographiques (lat/long) aux 4 coins de l'overlay
+  void _drawCornerCoordinates(
+      Canvas canvas, Rect dstRect, double rotationDegrees, double scale) {
+    // Les 4 coins dans le système de coordonnées local de l'image (avant rotation)
+    final corners = [
+      Offset(dstRect.left, dstRect.top), // Coin haut-gauche
+      Offset(dstRect.right, dstRect.top), // Coin haut-droit
+      Offset(dstRect.left, dstRect.bottom), // Coin bas-gauche
+      Offset(dstRect.right, dstRect.bottom), // Coin bas-droit
+    ];
+
+    final textPainter = TextPainter(
+      textDirection: TextDirection.ltr,
+      textAlign: TextAlign.center,
+    );
+
+    // Sauvegarder l'état actuel (avec les transformations appliquées)
+    canvas.save();
+
+    // Annuler la rotation et l'échelle pour revenir aux coordonnées écran
+    canvas.scale(1 / scale);
+    canvas.rotate(-rotationDegrees * (pi / 180));
+
+    for (int i = 0; i < corners.length; i++) {
+      final corner = corners[i];
+
+      // Appliquer les transformations pour obtenir la position écran réelle
+      // 1. Appliquer l'échelle
+      final scaledCorner = Offset(corner.dx * scale, corner.dy * scale);
+
+      // 2. Appliquer la rotation
+      final rotationRad = rotationDegrees * (pi / 180);
+      final cosTheta = cos(rotationRad);
+      final sinTheta = sin(rotationRad);
+
+      final rotatedX = scaledCorner.dx * cosTheta - scaledCorner.dy * sinTheta;
+      final rotatedY = scaledCorner.dx * sinTheta + scaledCorner.dy * cosTheta;
+
+      // 3. Ajouter le centre de l'image (coordonnées écran)
+      final centerPoint = camera.latLngToScreenPoint(overlayData.position);
+      final screenX = centerPoint.x + rotatedX;
+      final screenY = centerPoint.y + rotatedY;
+
+      // Convertir les coordonnées écran en coordonnées géographiques
+      final point = Point(screenX, screenY);
+      final latLng = camera.pointToLatLng(point);
+
+      // Formater le texte
+      final text =
+          '${latLng.latitude.toStringAsFixed(6)}\n${latLng.longitude.toStringAsFixed(6)}';
+
+      textPainter.text = TextSpan(
+        text: text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          backgroundColor: Colors.black87,
+          shadows: [
+            Shadow(
+              offset: Offset(1, 1),
+              blurRadius: 2,
+              color: Colors.black,
+            ),
+          ],
+        ),
+      );
+
+      textPainter.layout();
+
+      // Positionner le texte en fonction du coin
+      double offsetX;
+      double offsetY;
+
+      // Calculer les coordonnées pour le texte dans le système transformé
+      canvas.save();
+      canvas.rotate(rotationDegrees * (pi / 180));
+      canvas.scale(scale);
+
+      switch (i) {
+        case 0: // Haut-gauche
+          offsetX = corner.dx - textPainter.width - 5;
+          offsetY = corner.dy - textPainter.height - 5;
+          break;
+        case 1: // Haut-droit
+          offsetX = corner.dx + 5;
+          offsetY = corner.dy - textPainter.height - 5;
+          break;
+        case 2: // Bas-gauche
+          offsetX = corner.dx - textPainter.width - 5;
+          offsetY = corner.dy + 5;
+          break;
+        case 3: // Bas-droit
+          offsetX = corner.dx + 5;
+          offsetY = corner.dy + 5;
+          break;
+        default:
+          offsetX = 0;
+          offsetY = 0;
+      }
+
+      textPainter.paint(canvas, Offset(offsetX, offsetY));
+      canvas.restore();
     }
 
     canvas.restore();

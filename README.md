@@ -154,13 +154,13 @@ Widget de rendu CustomPaint gérant:
 - Stockage dans `ImageOverlayData.rotation`
 - Interface utilisateur (boutons ±15°, affichage)
 - Paramètre de la méthode `_rotateImage(double deltaDegre)`
+- `ImageOverlayData.referenceMapRotation` (référence pour le mode verrouillé)
 
 **Raison:** Plus intuitif pour l'utilisateur (30° est plus parlant que 0.524 radians)
 
 #### 2. RADIANS (0-2π)
 **Utilisé pour:**
 - `MapCamera.rotation` (flutter_map utilise toujours des radians)
-- `ImageOverlayData.referenceMapRotation` (référence pour le mode verrouillé)
 - `Canvas.rotate()` (API de dessin Flutter standard)
 
 **Raison:** Standard pour les APIs de bas niveau et les calculs mathématiques

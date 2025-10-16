@@ -10,6 +10,41 @@ import 'package:geolocator/geolocator.dart';
 import '../models/image_overlay.dart';
 import '../widgets/image_overlay_layer.dart';
 
+/// Écran principal de l'application avec carte interactive et overlay d'image.
+///
+/// Cette application permet de superposer une image PNG sur une carte OpenStreetMap
+/// avec les fonctionnalités suivantes:
+/// - Sélection d'image depuis le système de fichiers
+/// - Positionnement géographique de l'image
+/// - Rotation, zoom et déplacement de l'image
+/// - Mode verrouillé: l'image suit les mouvements de la carte
+/// - Sauvegarde/chargement de la configuration
+///
+/// ## Gestion des unités de rotation
+///
+/// IMPORTANT: Ce projet utilise deux systèmes d'unités pour les rotations:
+///
+/// 1. **DEGRÉS** (0-360°):
+///    - Stockage dans [ImageOverlayData.rotation]
+///    - Interface utilisateur (boutons de rotation, affichage)
+///    - Méthodes de manipulation: [_rotateImage(deltaDegre)]
+///    - Plus intuitif pour l'utilisateur
+///
+/// 2. **RADIANS** (0-2π):
+///    - MapController et MapCamera ([MapCamera.rotation])
+///    - Référence de rotation de la carte ([ImageOverlayData.referenceMapRotation])
+///    - Canvas.rotate() dans le painter
+///    - Standard pour les API de bas niveau
+///
+/// ### Conversions:
+/// - Degrés → Radians: `angle * (pi / 180)`
+/// - Radians → Degrés: `angle * (180 / pi)`
+///
+/// ### Flux de rotation:
+/// 1. Utilisateur clique sur bouton de rotation → delta en degrés
+/// 2. [_rotateImage()] ajoute le delta (degrés) à [rotation] (degrés)
+/// 3. [ImageOverlayPainter] convertit en radians pour canvas.rotate()
+/// 4. En mode verrouillé: combine rotation overlay (degrés) + delta carte (radians→degrés)
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
 
@@ -238,6 +273,16 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
+  /// Fait pivoter l'overlay d'un angle donné en degrés.
+  ///
+  /// Cette méthode ajoute [deltaDegre] degrés à la rotation actuelle de l'overlay.
+  /// La rotation est désactivée si l'overlay est verrouillé.
+  ///
+  /// Paramètres:
+  /// - [deltaDegre]: Angle de rotation à ajouter en degrés (positif = horaire, négatif = anti-horaire)
+  ///
+  /// Note: La valeur de rotation est stockée en degrés dans le modèle ImageOverlayData,
+  /// et sera convertie en radians lors du rendu dans ImageOverlayPainter.
   void _rotateImage(double deltaDegre) {
     if (_overlay == null || _isLocked) return;
     double? new_rotation = _overlay!.rotation + deltaDegre;

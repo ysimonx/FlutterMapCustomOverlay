@@ -106,9 +106,33 @@ lib/
 ├── screens/
 │   └── map_screen.dart                # Écran principal avec la carte
 └── widgets/
-    ├── custom_image_layer.dart        # Layer personnalisé (non utilisé)
-    └── image_overlay_widget.dart      # Widget d'affichage de l'overlay
+    └── image_overlay_layer.dart       # Widget de rendu de l'overlay
 ```
+
+### Composants principaux
+
+#### `ImageOverlayData` (models/image_overlay.dart)
+Modèle de données stockant la configuration de l'overlay:
+- Position géographique (LatLng)
+- **Rotation en DEGRÉS** (0-360°)
+- Échelle et dimensions d'affichage
+- État de verrouillage
+- **Rotation de référence de la carte en RADIANS** (pour le mode verrouillé)
+
+#### `MapScreen` (screens/map_screen.dart)
+Écran principal gérant:
+- Contrôle de la carte flutter_map
+- Interactions utilisateur (boutons de rotation, zoom, déplacement)
+- Gestion des modes (édition, verrouillé)
+- Sauvegarde/chargement de la configuration
+- Géolocalisation GPS
+
+#### `ImageOverlayLayer` (widgets/image_overlay_layer.dart)
+Widget de rendu CustomPaint gérant:
+- Conversion coordonnées géographiques ↔ écran
+- Application des transformations (rotation, zoom, translation)
+- Rendu avec Canvas API
+- Mode édition avec poignées visuelles
 
 ## Dépendances principales
 
@@ -121,11 +145,118 @@ lib/
 
 ## Notes techniques
 
+### Gestion des rotations
+
+⚠️ **IMPORTANT**: Ce projet utilise **deux systèmes d'unités** pour les rotations.
+
+#### 1. DEGRÉS (0-360°)
+**Utilisé pour:**
+- Stockage dans `ImageOverlayData.rotation`
+- Interface utilisateur (boutons ±15°, affichage)
+- Paramètre de la méthode `_rotateImage(double deltaDegre)`
+
+**Raison:** Plus intuitif pour l'utilisateur (30° est plus parlant que 0.524 radians)
+
+#### 2. RADIANS (0-2π)
+**Utilisé pour:**
+- `MapCamera.rotation` (flutter_map utilise toujours des radians)
+- `ImageOverlayData.referenceMapRotation` (référence pour le mode verrouillé)
+- `Canvas.rotate()` (API de dessin Flutter standard)
+
+**Raison:** Standard pour les APIs de bas niveau et les calculs mathématiques
+
+### Conversions
+
+```dart
+// Degrés → Radians
+double radians = degrees * (pi / 180);
+
+// Radians → Degrés
+double degrees = radians * (180 / pi);
+```
+
+### Flux de rotation de l'overlay
+
+1. **Utilisateur clique sur bouton de rotation (±15°)**
+   ```dart
+   _rotateImage(15.0); // Delta en degrés
+   ```
+
+2. **Mise à jour du modèle (en degrés)**
+   ```dart
+   rotation = currentRotation + deltaDegre; // Stocké en degrés
+   ```
+
+3. **Rendu dans ImageOverlayPainter (conversion en radians)**
+   ```dart
+   canvas.rotate(finalRotationDegrees * (pi / 180)); // Conversion pour Canvas
+   ```
+
+4. **En mode verrouillé: synchronisation avec la carte**
+   ```dart
+   // La carte rotate en degres
+   double mapDeltaDegrees =
+       (currentMapRotation - referenceMapRotation) ;
+
+   // Combiné avec la rotation de l'overlay (en degrés)
+   finalRotation = overlayRotation + mapDeltaDegrees;
+   ```
+
+### Rotation de la carte
+
+Les boutons de rotation de la carte (en bas à gauche) utilisent ±30°:
+```dart
+void _rotateMapLeft() {
+  final currentRotation = mapController.camera.rotation; // en radians
+  const delta = -30.0; // en degrés
+  final newRotation = currentRotation + delta;
+  mapController.moveAndRotate(center, zoom, newRotation);
+}
+```
+
+Un indicateur d'angle en temps réel affiche la rotation actuelle de la carte en degrés.
+
+### Points d'attention
+
+#### ⚠️ Persistance de `referenceMapRotation`
+
+`referenceMapRotation` n'est **PAS sauvegardée** en JSON car:
+- Elle doit être capturée uniquement au moment du verrouillage
+- La sauvegarder causerait des problèmes de synchronisation
+- Elle est toujours réinitialisée à `0.0` au chargement
+
+```dart
+// toJson() - NE PAS inclure referenceMapRotation
+Map<String, dynamic> toJson() {
+  return {
+    'rotation': rotation, // en degrés ✓
+    'referenceZoom': referenceZoom,
+    // referenceMapRotation omis volontairement ✓
+  };
+}
+```
+
+#### 🎯 Conversions de coordonnées
+
+Flutter_map fournit des méthodes natives - **toujours les utiliser**:
+```dart
+// Géographique → Écran
+Point screenPoint = camera.latLngToScreenPoint(latLng);
+
+// Écran → Géographique
+LatLng latLng = camera.pointToLatLng(screenPoint);
+```
+
+**Ne jamais** utiliser de formules Mercator approximatives.
+
+### Autres caractéristiques techniques
+
 - L'image conserve ses proportions d'origine
-- Les transformations (rotation, échelle, position) sont appliquées via Canvas
+- Les transformations sont appliquées via Canvas avec matrice de transformation
 - La sauvegarde utilise SharedPreferences avec encodage JSON et Base64
-- L'overlay suit les mouvements de la carte quand il est verrouillé
-- La géolocalisation demande les permissions appropriées au démarrage (Android et iOS)
+- L'overlay suit les mouvements et rotations de la carte en mode verrouillé
+- Zoom adaptatif: `zoomScale = pow(2.0, currentZoom - referenceZoom)`
+- La géolocalisation demande les permissions appropriées au démarrage
 - Si la géolocalisation échoue, la carte se centre par défaut sur Paris
 
 ## Limitations connues

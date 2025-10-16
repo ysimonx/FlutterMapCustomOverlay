@@ -1,0 +1,19 @@
+créés moi une application, compatible web, android, ios,
+ écrite en flutter pour permettre l'ajout d'un plan
+  sur une carte openstreetmap :
+
+Je souhaite pouvoir me positionner où je veux sur cette carte, 
+puis avoir la possibilité de selectionner un fichier png sur mon appareil,
+ et l'ajouter en overlay sur la carte.
+L'image doit etre affichée avec les proportions du fichier initial
+
+Une fois cette image affichée sur la carte, je souhaite pouvoir 
+l'agrandir, la déplacer, la faire tourner (en rotation) 
+pour ajuster exactement sa position.
+
+Enfin, une fois que je serai satisfait, je souhaite pouvoir enregistrer
+ la taille, la position et la rotation de cette image sur cette carte.
+  Une fois ces informations enregistrees, 
+  je souhaite pouvoir fixer tout cela une fois pour toute et
+   manipuler la carte openstreet map avec cet overlay
+    qui bougera avec ma navigation

@@ -51,6 +51,9 @@ class ImageOverlayData {
   /// de synchronisation. Elle est capturée uniquement au moment du verrouillage.
   final double referenceMapRotation;
 
+  /// Opacité de l'overlay (0.0 = transparent, 1.0 = opaque)
+  final double opacity;
+
   ImageOverlayData({
     required this.id,
     required this.position,
@@ -63,6 +66,7 @@ class ImageOverlayData {
     this.isLocked = false,
     this.referenceZoom = 13.0,
     this.referenceMapRotation = 0.0,
+    this.opacity = 1.0,
   });
 
   ImageOverlayData copyWith({
@@ -77,6 +81,7 @@ class ImageOverlayData {
     bool? isLocked,
     double? referenceZoom,
     double? referenceMapRotation,
+    double? opacity,
   }) {
     ImageOverlayData x = ImageOverlayData(
       id: id ?? this.id,
@@ -90,6 +95,7 @@ class ImageOverlayData {
       isLocked: isLocked ?? this.isLocked,
       referenceZoom: referenceZoom ?? this.referenceZoom,
       referenceMapRotation: referenceMapRotation ?? this.referenceMapRotation,
+      opacity: opacity ?? this.opacity,
     );
     return x;
   }
@@ -107,6 +113,7 @@ class ImageOverlayData {
       'imageHeight': imageHeight,
       'isLocked': isLocked,
       'referenceZoom': referenceZoom,
+      'opacity': opacity,
       // Ne PAS sauvegarder referenceMapRotation - sera capturé au verrouillage
     };
   }
@@ -124,6 +131,7 @@ class ImageOverlayData {
       imageHeight: json['imageHeight'],
       isLocked: json['isLocked'] ?? false,
       referenceZoom: json['referenceZoom'] ?? 13.0,
+      opacity: json['opacity'] ?? 1.0,
       // referenceMapRotation sera toujours 0.0 au chargement
       // et sera mis à jour lors du verrouillage
       referenceMapRotation: 0.0,

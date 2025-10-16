@@ -666,6 +666,36 @@ class _MapScreenState extends State<MapScreen> {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 16),
+                      Column(
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.opacity, size: 20),
+                              const SizedBox(width: 8),
+                              const Text('Transparence'),
+                              Expanded(
+                                child: Slider(
+                                  value: _overlay!.opacity,
+                                  min: 0.0,
+                                  max: 1.0,
+                                  divisions: 20,
+                                  label: '${(_overlay!.opacity * 100).toStringAsFixed(0)}%',
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _overlay = _overlay!.copyWith(opacity: value);
+                                    });
+                                  },
+                                ),
+                              ),
+                              Text(
+                                '${(_overlay!.opacity * 100).toStringAsFixed(0)}%',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 8),
                       Text(
                         'Échelle: ${_overlay!.scale.toStringAsFixed(2)} | '

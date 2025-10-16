@@ -129,7 +129,8 @@ class ImageOverlayPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..filterQuality = FilterQuality.high
-      ..isAntiAlias = true;
+      ..isAntiAlias = true
+      ..color = Color.fromRGBO(255, 255, 255, overlayData.opacity);
 
     // Convertir la position géographique en position écran
     final point = camera.latLngToScreenPoint(overlayData.position);

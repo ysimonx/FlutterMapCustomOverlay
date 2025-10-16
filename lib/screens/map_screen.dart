@@ -58,7 +58,7 @@ class _MapScreenState extends State<MapScreen> {
   bool _isEditMode = false;
   bool _isLocked = false;
 
-  LatLng _currentCenter = LatLng(48.8566, 2.3522); // Paris par défaut
+  LatLng _currentCenter = const LatLng(48.8566, 2.3522); // Paris par défaut
 
   @override
   void initState() {
@@ -285,12 +285,11 @@ class _MapScreenState extends State<MapScreen> {
   /// et sera convertie en radians lors du rendu dans ImageOverlayPainter.
   void _rotateImage(double deltaDegre) {
     if (_overlay == null || _isLocked) return;
-    double? new_rotation = _overlay!.rotation + deltaDegre;
+    double? newRotation = _overlay!.rotation + deltaDegre;
     setState(() {
       _overlay = _overlay!.copyWith(
-        rotation: (new_rotation),
+        rotation: (newRotation),
       );
-      print(_overlay?.rotation);
     });
   }
 
@@ -584,123 +583,130 @@ class _MapScreenState extends State<MapScreen> {
               right: 20,
               child: Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text(
-                        'Contrôles de l\'overlay',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+                      // Première ligne: Rotation, Échelle, Déplacement
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
-                          Column(
-                            children: [
-                              const Text('Rotation'),
-                              Row(
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.rotate_left),
-                                    onPressed: () => _rotateImage(-1),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.rotate_right),
-                                    onPressed: () => _rotateImage(1),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                          Column(
-                            children: [
-                              const Text('Échelle'),
-                              Row(
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.zoom_out),
-                                    onPressed: () => _scaleImage(-0.05),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.zoom_in),
-                                    onPressed: () => _scaleImage(0.05),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Column(
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.arrow_upward),
-                                onPressed: () => _moveImage(0, -10),
-                              ),
-                              Row(
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.arrow_back),
-                                    onPressed: () => _moveImage(-10, 0),
-                                  ),
-                                  const SizedBox(width: 32),
-                                  IconButton(
-                                    icon: const Icon(Icons.arrow_forward),
-                                    onPressed: () => _moveImage(10, 0),
-                                  ),
-                                ],
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.arrow_downward),
-                                onPressed: () => _moveImage(0, 10),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Column(
-                        children: [
+                          // Rotation
                           Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.opacity, size: 20),
-                              const SizedBox(width: 8),
-                              const Text('Transparence'),
-                              Expanded(
-                                child: Slider(
-                                  value: _overlay!.opacity,
-                                  min: 0.0,
-                                  max: 1.0,
-                                  divisions: 20,
-                                  label: '${(_overlay!.opacity * 100).toStringAsFixed(0)}%',
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _overlay = _overlay!.copyWith(opacity: value);
-                                    });
-                                  },
-                                ),
+                              IconButton(
+                                icon: const Icon(Icons.rotate_left, size: 20),
+                                iconSize: 20,
+                                padding: const EdgeInsets.all(4),
+                                constraints: const BoxConstraints(),
+                                onPressed: () => _rotateImage(-1),
+                                tooltip: 'Rotation gauche',
                               ),
-                              Text(
-                                '${(_overlay!.opacity * 100).toStringAsFixed(0)}%',
-                                style: const TextStyle(fontSize: 12),
+                              IconButton(
+                                icon: const Icon(Icons.rotate_right, size: 20),
+                                iconSize: 20,
+                                padding: const EdgeInsets.all(4),
+                                constraints: const BoxConstraints(),
+                                onPressed: () => _rotateImage(1),
+                                tooltip: 'Rotation droite',
+                              ),
+                            ],
+                          ),
+                          // Échelle
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.zoom_out, size: 20),
+                                iconSize: 20,
+                                padding: const EdgeInsets.all(4),
+                                constraints: const BoxConstraints(),
+                                onPressed: () => _scaleImage(-0.05),
+                                tooltip: 'Réduire',
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.zoom_in, size: 20),
+                                iconSize: 20,
+                                padding: const EdgeInsets.all(4),
+                                constraints: const BoxConstraints(),
+                                onPressed: () => _scaleImage(0.05),
+                                tooltip: 'Agrandir',
+                              ),
+                            ],
+                          ),
+                          // Déplacement compact
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.arrow_upward, size: 16),
+                                iconSize: 16,
+                                padding: const EdgeInsets.all(2),
+                                constraints: const BoxConstraints(),
+                                onPressed: () => _moveImage(0, -10),
+                                tooltip: 'Haut',
+                              ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.arrow_back, size: 16),
+                                    iconSize: 16,
+                                    padding: const EdgeInsets.all(2),
+                                    constraints: const BoxConstraints(),
+                                    onPressed: () => _moveImage(-10, 0),
+                                    tooltip: 'Gauche',
+                                  ),
+                                  const SizedBox(width: 16),
+                                  IconButton(
+                                    icon: const Icon(Icons.arrow_forward, size: 16),
+                                    iconSize: 16,
+                                    padding: const EdgeInsets.all(2),
+                                    constraints: const BoxConstraints(),
+                                    onPressed: () => _moveImage(10, 0),
+                                    tooltip: 'Droite',
+                                  ),
+                                ],
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.arrow_downward, size: 16),
+                                iconSize: 16,
+                                padding: const EdgeInsets.all(2),
+                                constraints: const BoxConstraints(),
+                                onPressed: () => _moveImage(0, 10),
+                                tooltip: 'Bas',
                               ),
                             ],
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Échelle: ${_overlay!.scale.toStringAsFixed(2)} | '
-                        'Rotation: ${(_overlay!.rotation).toStringAsFixed(0)}°',
-                        style: const TextStyle(fontSize: 12),
+                      const SizedBox(height: 4),
+                      // Deuxième ligne: Transparence (compacte)
+                      Row(
+                        children: [
+                          const Icon(Icons.opacity, size: 16),
+                          Expanded(
+                            child: Slider(
+                              value: _overlay!.opacity,
+                              min: 0.0,
+                              max: 1.0,
+                              divisions: 20,
+                              onChanged: (value) {
+                                setState(() {
+                                  _overlay = _overlay!.copyWith(opacity: value);
+                                });
+                              },
+                            ),
+                          ),
+                          SizedBox(
+                            width: 35,
+                            child: Text(
+                              '${(_overlay!.opacity * 100).toStringAsFixed(0)}%',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

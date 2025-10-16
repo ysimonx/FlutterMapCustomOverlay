@@ -1,7 +1,5 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 import '../models/image_overlay.dart';
 
 class CustomImageLayer extends StatelessWidget {
@@ -101,7 +99,8 @@ class _CustomImageLayerWidgetState extends State<CustomImageLayerWidget> {
 
   Future<void> _loadImage() async {
     if (widget.overlayData.imageBytes == null) return;
-    final codec = await ui.instantiateImageCodec(widget.overlayData.imageBytes!);
+    final codec =
+        await ui.instantiateImageCodec(widget.overlayData.imageBytes!);
     final frame = await codec.getNextFrame();
     if (mounted) {
       setState(() {
@@ -161,12 +160,9 @@ class ImageOverlayMapPainter extends CustomPainter {
     canvas.rotate(overlayData.rotation);
     canvas.scale(overlayData.scale);
 
-    // Calculer la taille de l'image
-    final imageWidth = overlayData.imageWidth * overlayData.scale;
-    final imageHeight = overlayData.imageHeight * overlayData.scale;
-
     // Dessiner l'image centrée
-    final srcRect = Rect.fromLTWH(0, 0, uiImage.width.toDouble(), uiImage.height.toDouble());
+    final srcRect = Rect.fromLTWH(
+        0, 0, uiImage.width.toDouble(), uiImage.height.toDouble());
     final dstRect = Rect.fromLTWH(
       -overlayData.imageWidth / 2,
       -overlayData.imageHeight / 2,
@@ -193,10 +189,14 @@ class ImageOverlayMapPainter extends CustomPainter {
       final handleRadius = 8.0 / overlayData.scale;
 
       // Poignées aux coins
-      canvas.drawCircle(Offset(dstRect.left, dstRect.top), handleRadius, handlePaint);
-      canvas.drawCircle(Offset(dstRect.right, dstRect.top), handleRadius, handlePaint);
-      canvas.drawCircle(Offset(dstRect.left, dstRect.bottom), handleRadius, handlePaint);
-      canvas.drawCircle(Offset(dstRect.right, dstRect.bottom), handleRadius, handlePaint);
+      canvas.drawCircle(
+          Offset(dstRect.left, dstRect.top), handleRadius, handlePaint);
+      canvas.drawCircle(
+          Offset(dstRect.right, dstRect.top), handleRadius, handlePaint);
+      canvas.drawCircle(
+          Offset(dstRect.left, dstRect.bottom), handleRadius, handlePaint);
+      canvas.drawCircle(
+          Offset(dstRect.right, dstRect.bottom), handleRadius, handlePaint);
     }
 
     canvas.restore();

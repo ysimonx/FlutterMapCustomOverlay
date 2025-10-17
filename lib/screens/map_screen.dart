@@ -335,8 +335,17 @@ class _MapScreenState extends State<MapScreen> {
           );
           _isEditMode = false;
         } else {
-          // Quand on déverrouille
-          _overlay = _overlay!.copyWith(isLocked: false);
+          // Quand on déverrouille, conserver la rotation actuelle
+          // Calculer la rotation finale qui était appliquée en mode verrouillé
+          final currentMapRotation = _mapController.camera.rotation;
+          final mapRotationDelta = currentMapRotation - _overlay!.referenceMapRotation;
+          final finalRotation = _overlay!.rotation + mapRotationDelta;
+
+          _overlay = _overlay!.copyWith(
+            isLocked: false,
+            rotation: finalRotation,
+            referenceMapRotation: currentMapRotation,
+          );
         }
       }
     });

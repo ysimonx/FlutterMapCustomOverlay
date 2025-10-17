@@ -16,6 +16,7 @@ import '../models/image_overlay.dart';
 /// - Zoom adaptatif qui suit le niveau de zoom de la carte
 /// - Mode verrouillé: l'overlay suit les rotations de la carte
 /// - Mode édition: affiche des poignées visuelles pour la manipulation
+/// - Glisser-déposer pour déplacer l'overlay en mode édition
 ///
 /// Gestion des unités de rotation:
 /// - Les angles sont stockés en DEGRÉS dans [ImageOverlayData.rotation]
@@ -28,10 +29,14 @@ class ImageOverlayLayer extends StatefulWidget {
   /// Active l'affichage des poignées de manipulation (bordures et coins)
   final bool isEditMode;
 
+  /// Callback appelé quand l'overlay est déplacé par glisser-déposer
+  final Function(LatLng newPosition)? onPositionChanged;
+
   const ImageOverlayLayer({
     super.key,
     required this.overlayData,
     this.isEditMode = false,
+    this.onPositionChanged,
   });
 
   @override
@@ -40,6 +45,8 @@ class ImageOverlayLayer extends StatefulWidget {
 
 class _ImageOverlayLayerState extends State<ImageOverlayLayer> {
   ui.Image? _uiImage;
+  Offset? _dragStartPosition;
+  LatLng? _overlayStartPosition;
 
   @override
   void initState() {
@@ -73,13 +80,53 @@ class _ImageOverlayLayerState extends State<ImageOverlayLayer> {
     }
   }
 
+  void _onPanStart(DragStartDetails details) {
+    if (!widget.isEditMode) return;
+
+    setState(() {
+      _dragStartPosition = details.localPosition;
+      _overlayStartPosition = widget.overlayData.position;
+    });
+  }
+
+  void _onPanUpdate(DragUpdateDetails details) {
+    if (!widget.isEditMode || _dragStartPosition == null || _overlayStartPosition == null) return;
+
+    final camera = MapCamera.of(context);
+
+    // Calculer le déplacement en pixels
+    final delta = details.localPosition - _dragStartPosition!;
+
+    // Convertir la position de départ de l'overlay en coordonnées écran
+    final startScreenPoint = camera.latLngToScreenPoint(_overlayStartPosition!);
+
+    // Ajouter le déplacement
+    final newScreenPoint = Point(
+      startScreenPoint.x + delta.dx,
+      startScreenPoint.y + delta.dy,
+    );
+
+    // Convertir la nouvelle position écran en coordonnées géographiques
+    final newLatLng = camera.pointToLatLng(newScreenPoint);
+
+    // Notifier le parent du changement de position
+    widget.onPositionChanged?.call(newLatLng);
+  }
+
+  void _onPanEnd(DragEndDetails details) {
+    setState(() {
+      _dragStartPosition = null;
+      _overlayStartPosition = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_uiImage == null) {
       return const SizedBox.shrink();
     }
 
-    return CustomPaint(
+    final customPaint = CustomPaint(
       painter: ImageOverlayPainter(
         overlayData: widget.overlayData,
         uiImage: _uiImage!,
@@ -88,6 +135,18 @@ class _ImageOverlayLayerState extends State<ImageOverlayLayer> {
       ),
       size: Size.infinite,
     );
+
+    // En mode édition, envelopper dans un GestureDetector pour le drag
+    if (widget.isEditMode) {
+      return GestureDetector(
+        onPanStart: _onPanStart,
+        onPanUpdate: _onPanUpdate,
+        onPanEnd: _onPanEnd,
+        child: customPaint,
+      );
+    }
+
+    return customPaint;
   }
 }
 

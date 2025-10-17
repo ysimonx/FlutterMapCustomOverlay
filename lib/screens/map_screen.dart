@@ -58,7 +58,7 @@ class _MapScreenState extends State<MapScreen> {
   bool _isEditMode = false;
   bool _isLocked = false;
 
-  LatLng _currentCenter = const LatLng(48.8566, 2.3522); // Paris par défaut
+  LatLng _currentCenter = const LatLng(43.7084, 5.7737); // ITER Cadarache par défaut
 
   @override
   void initState() {
@@ -474,6 +474,11 @@ class _MapScreenState extends State<MapScreen> {
                     return ImageOverlayLayer(
                       overlayData: _overlay!,
                       isEditMode: _isEditMode && !_isLocked,
+                      onPositionChanged: (newPosition) {
+                        setState(() {
+                          _overlay = _overlay!.copyWith(position: newPosition);
+                        });
+                      },
                     );
                   },
                 ),

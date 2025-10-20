@@ -58,7 +58,6 @@ class _MapScreenState extends State<MapScreen> {
   final MapController _mapController = MapController();
   ImageOverlayData? _overlay;
   bool _isEditMode = false;
-  bool _isLocked = false;
   bool _isInteractingWithOverlay = false;
   bool _isLoadingImage = false;
 
@@ -90,8 +89,8 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _getCurrentLocation() async {
-    // Si l'overlay est verrouillé, centrer sur l'overlay au lieu de la position GPS
-    if (_overlay != null && _isLocked) {
+    // Si l'overlay est en mode "suivre" (non éditable), centrer sur l'overlay au lieu de la position GPS
+    if (_overlay != null && !_isEditMode) {
       _centerOnOverlay();
       return;
     }
@@ -192,7 +191,8 @@ class _MapScreenState extends State<MapScreen> {
         final data = jsonDecode(overlayJson);
         setState(() {
           _overlay = ImageOverlayData.fromJson(data);
-          _isLocked = _overlay!.isLocked;
+          // L'overlay chargé n'est pas en mode édition par défaut
+          _isEditMode = false;
           if (_overlay != null) {
             _currentCenter = _overlay!.position;
           }
@@ -301,7 +301,6 @@ class _MapScreenState extends State<MapScreen> {
               referenceMapRotation: _mapController.camera.rotation,
             );
             _isEditMode = true;
-            _isLocked = false;
             _isLoadingImage = false;
           });
         } else if (mounted) {
@@ -325,7 +324,7 @@ class _MapScreenState extends State<MapScreen> {
   /// Fait pivoter l'overlay d'un angle donné en degrés.
   ///
   /// Cette méthode ajoute [deltaDegre] degrés à la rotation actuelle de l'overlay.
-  /// La rotation est désactivée si l'overlay est verrouillé.
+  /// La rotation est désactivée si l'overlay n'est pas en mode édition.
   ///
   /// Paramètres:
   /// - [deltaDegre]: Angle de rotation à ajouter en degrés (positif = horaire, négatif = anti-horaire)
@@ -333,7 +332,7 @@ class _MapScreenState extends State<MapScreen> {
   /// Note: La valeur de rotation est stockée en degrés dans le modèle ImageOverlayData,
   /// et sera convertie en radians lors du rendu dans ImageOverlayPainter.
   void _rotateImage(double deltaDegre) {
-    if (_overlay == null || _isLocked) return;
+    if (_overlay == null || !_isEditMode) return;
     double? newRotation = _overlay!.rotation + deltaDegre;
     setState(() {
       _overlay = _overlay!.copyWith(
@@ -343,7 +342,7 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _scaleImage(double delta) {
-    if (_overlay == null || _isLocked) return;
+    if (_overlay == null || !_isEditMode) return;
     setState(() {
       final newScale = (_overlay!.scale + delta).clamp(0.1, 50.0);
       _overlay = _overlay!.copyWith(scale: newScale);
@@ -351,7 +350,7 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _moveImage(double dx, double dy) {
-    if (_overlay == null || _isLocked) return;
+    if (_overlay == null || !_isEditMode) return;
 
     final camera = _mapController.camera;
 
@@ -372,44 +371,45 @@ class _MapScreenState extends State<MapScreen> {
     });
   }
 
-  void _toggleLock() {
-    setState(() {
-      _isLocked = !_isLocked;
-      if (_overlay != null) {
-        if (_isLocked) {
-          // Quand on verrouille, capturer la rotation actuelle de la carte comme référence
-          _overlay = _overlay!.copyWith(
-            isLocked: true,
-            referenceMapRotation: _mapController.camera.rotation,
-          );
-          _isEditMode = false;
-        } else {
-          // Quand on déverrouille, conserver la rotation actuelle
-          // Calculer la rotation finale qui était appliquée en mode verrouillé
-          final currentMapRotation = _mapController.camera.rotation;
-          final mapRotationDelta =
-              currentMapRotation - _overlay!.referenceMapRotation;
-          final finalRotation = _overlay!.rotation + mapRotationDelta;
 
-          _overlay = _overlay!.copyWith(
-            isLocked: false,
-            rotation: finalRotation,
-            referenceMapRotation: currentMapRotation,
-          );
-        }
+  Future<void> _deleteOverlay() async {
+    // Demander confirmation avant de supprimer
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Supprimer l\'overlay'),
+        content: const Text('Êtes-vous sûr de vouloir supprimer cet overlay ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() {
+        _overlay = null;
+        _isEditMode = false;
+      });
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('image_overlay');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Overlay supprimé avec succès'),
+            duration: Duration(seconds: 2),
+          ),
+        );
       }
-    });
-  }
-
-  void _deleteOverlay() {
-    setState(() {
-      _overlay = null;
-      _isEditMode = false;
-      _isLocked = false;
-    });
-    SharedPreferences.getInstance().then((prefs) {
-      prefs.remove('image_overlay');
-    });
+    }
   }
 
   void _zoomIn() {
@@ -486,17 +486,49 @@ class _MapScreenState extends State<MapScreen> {
         title: const Text('Carte avec Overlay'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
-          if (_overlay != null && !_isLocked)
+          if (_overlay != null)
             IconButton(
-              icon: const Icon(Icons.save),
-              tooltip: 'Sauvegarder',
-              onPressed: _saveOverlay,
+              icon: const Icon(Icons.image),
+              tooltip: 'Changer d\'overlay',
+              onPressed: _pickImage,
             ),
           if (_overlay != null)
             IconButton(
-              icon: Icon(_isLocked ? Icons.lock : Icons.lock_open),
-              tooltip: _isLocked ? 'Déverrouiller' : 'Verrouiller',
-              onPressed: _toggleLock,
+              icon: Icon(_isEditMode ? Icons.check : Icons.edit),
+              tooltip: _isEditMode ? 'Terminer et sauvegarder' : 'Éditer',
+              onPressed: () async {
+                if (_isEditMode) {
+                  // Terminer l'édition : passer en mode "suivre la carte" et sauvegarder
+                  setState(() {
+                    _isEditMode = false;
+                    if (_overlay != null) {
+                      _overlay = _overlay!.copyWith(
+                        isLocked: true,
+                        referenceMapRotation: _mapController.camera.rotation,
+                      );
+                    }
+                  });
+                  // Sauvegarder après avoir mis à jour l'état
+                  await _saveOverlay();
+                } else {
+                  // Passer en mode édition
+                  setState(() {
+                    _isEditMode = true;
+                    if (_overlay != null) {
+                      final currentMapRotation = _mapController.camera.rotation;
+                      final mapRotationDelta =
+                          currentMapRotation - _overlay!.referenceMapRotation;
+                      final finalRotation = _overlay!.rotation + mapRotationDelta;
+
+                      _overlay = _overlay!.copyWith(
+                        isLocked: false,
+                        rotation: finalRotation,
+                        referenceMapRotation: currentMapRotation,
+                      );
+                    }
+                  });
+                }
+              },
             ),
           if (_overlay != null)
             IconButton(
@@ -517,7 +549,7 @@ class _MapScreenState extends State<MapScreen> {
               interactionOptions: InteractionOptions(
                 flags: _isInteractingWithOverlay
                     ? InteractiveFlag.none
-                    : (_isLocked
+                    : (!_isEditMode
                         ? InteractiveFlag.all
                         : InteractiveFlag.all & ~InteractiveFlag.rotate),
               ),
@@ -534,7 +566,7 @@ class _MapScreenState extends State<MapScreen> {
                   builder: (context, snapshot) {
                     return ImageOverlayLayer(
                       overlayData: _overlay!,
-                      isEditMode: _isEditMode && !_isLocked,
+                      isEditMode: _isEditMode,
                       onPositionChanged: (newPosition) {
                         setState(() {
                           _overlay = _overlay!.copyWith(position: newPosition);
@@ -585,11 +617,11 @@ class _MapScreenState extends State<MapScreen> {
                   heroTag: 'my_location',
                   mini: true,
                   onPressed: _getCurrentLocation,
-                  tooltip: (_overlay != null && _isLocked)
+                  tooltip: (_overlay != null && !_isEditMode)
                       ? 'Centrer sur l\'overlay'
                       : 'Ma position',
                   child: Icon(
-                    (_overlay != null && _isLocked)
+                    (_overlay != null && !_isEditMode)
                         ? Icons.center_focus_strong
                         : Icons.my_location,
                   ),
@@ -657,7 +689,7 @@ class _MapScreenState extends State<MapScreen> {
               ],
             ),
           ),
-          if (_overlay != null && _isEditMode && !_isLocked)
+          if (_overlay != null && _isEditMode)
             Positioned(
               bottom: 100, // Augmenté pour laisser de la place au bouton "Terminer"
               left: 80,
@@ -835,35 +867,7 @@ class _MapScreenState extends State<MapScreen> {
               icon: const Icon(Icons.add_photo_alternate),
               label: const Text('Ajouter un overlay (PNG, JPEG, etc.)'),
             )
-          : !_isLocked && !_isEditMode
-              ? FloatingActionButton.extended(
-                  onPressed: () {
-                    setState(() {
-                      _isEditMode = true;
-                    });
-                  },
-                  icon: const Icon(Icons.edit),
-                  label: const Text('Éditer'),
-                )
-              : _isEditMode
-                  ? FloatingActionButton.extended(
-                      onPressed: () {
-                        setState(() {
-                          _isEditMode = false;
-                          // Verrouiller automatiquement l'overlay
-                          _isLocked = true;
-                          if (_overlay != null) {
-                            _overlay = _overlay!.copyWith(
-                              isLocked: true,
-                              referenceMapRotation: _mapController.camera.rotation,
-                            );
-                          }
-                        });
-                      },
-                      icon: const Icon(Icons.check),
-                      label: const Text('Terminer'),
-                    )
-                  : null,
+          : null,
     );
   }
 }

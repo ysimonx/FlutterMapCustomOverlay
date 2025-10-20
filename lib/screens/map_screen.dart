@@ -57,6 +57,7 @@ class _MapScreenState extends State<MapScreen> {
   ImageOverlayData? _overlay;
   bool _isEditMode = false;
   bool _isLocked = false;
+  bool _isInteractingWithOverlay = false;
 
   LatLng _currentCenter = const LatLng(43.7084, 5.7737); // ITER Cadarache par défaut
 
@@ -465,9 +466,11 @@ class _MapScreenState extends State<MapScreen> {
               initialZoom: 13.0,
               initialRotation: 0.0,
               interactionOptions: InteractionOptions(
-                flags: _isLocked
-                    ? InteractiveFlag.all
-                    : InteractiveFlag.all & ~InteractiveFlag.rotate,
+                flags: _isInteractingWithOverlay
+                    ? InteractiveFlag.none
+                    : (_isLocked
+                        ? InteractiveFlag.all
+                        : InteractiveFlag.all & ~InteractiveFlag.rotate),
               ),
             ),
             children: [
@@ -486,6 +489,16 @@ class _MapScreenState extends State<MapScreen> {
                       onPositionChanged: (newPosition) {
                         setState(() {
                           _overlay = _overlay!.copyWith(position: newPosition);
+                        });
+                      },
+                      onRotationChanged: (newRotation) {
+                        setState(() {
+                          _overlay = _overlay!.copyWith(rotation: newRotation);
+                        });
+                      },
+                      onInteractionChanged: (isInteracting) {
+                        setState(() {
+                          _isInteractingWithOverlay = isInteracting;
                         });
                       },
                     );

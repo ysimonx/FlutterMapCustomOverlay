@@ -32,11 +32,19 @@ class ImageOverlayLayer extends StatefulWidget {
   /// Callback appelé quand l'overlay est déplacé par glisser-déposer
   final Function(LatLng newPosition)? onPositionChanged;
 
+  /// Callback appelé quand l'overlay est pivoté via la poignée de rotation
+  final Function(double newRotation)? onRotationChanged;
+
+  /// Callback appelé pour indiquer qu'une interaction est en cours (pour désactiver la carte)
+  final Function(bool isInteracting)? onInteractionChanged;
+
   const ImageOverlayLayer({
     super.key,
     required this.overlayData,
     this.isEditMode = false,
     this.onPositionChanged,
+    this.onRotationChanged,
+    this.onInteractionChanged,
   });
 
   @override
@@ -47,6 +55,9 @@ class _ImageOverlayLayerState extends State<ImageOverlayLayer> {
   ui.Image? _uiImage;
   Offset? _dragStartPosition;
   LatLng? _overlayStartPosition;
+  bool _isRotating = false;
+  double? _initialRotation;
+  double? _initialAngle;
 
   @override
   void initState() {
@@ -80,44 +91,147 @@ class _ImageOverlayLayerState extends State<ImageOverlayLayer> {
     }
   }
 
-  void _onPanStart(DragStartDetails details) {
-    if (!widget.isEditMode) return;
+  /// Vérifie si le point touché est sur la poignée de rotation
+  bool _isPointOnRotationHandle(Offset localPoint, Offset rotationHandleCenter, double scale) {
+    const handleRadius = 10.0;
+    const rotationHandleSize = handleRadius * 1.2;
 
-    setState(() {
-      _dragStartPosition = details.localPosition;
-      _overlayStartPosition = widget.overlayData.position;
-    });
+    // Distance entre le point touché et le centre de la poignée de rotation
+    final distance = (localPoint - rotationHandleCenter).distance;
+
+    // Prendre en compte l'échelle pour le rayon de détection
+    return distance <= (rotationHandleSize * scale * 1.5); // Zone de détection plus large
   }
 
-  void _onPanUpdate(DragUpdateDetails details) {
-    if (!widget.isEditMode || _dragStartPosition == null || _overlayStartPosition == null) return;
+  void _onPointerDown(PointerDownEvent event) {
+    if (!widget.isEditMode) return;
 
     final camera = MapCamera.of(context);
 
-    // Calculer le déplacement en pixels
-    final delta = details.localPosition - _dragStartPosition!;
+    // Convertir la position de l'overlay en coordonnées écran
+    final centerPoint = camera.latLngToScreenPoint(widget.overlayData.position);
 
-    // Convertir la position de départ de l'overlay en coordonnées écran
-    final startScreenPoint = camera.latLngToScreenPoint(_overlayStartPosition!);
+    // Calculer la position de la poignée de rotation en coordonnées écran
+    final currentZoom = camera.zoom;
+    final zoomFactor = currentZoom - widget.overlayData.referenceZoom;
+    final zoomScale = pow(2.0, zoomFactor).toDouble();
+    final finalScale = widget.overlayData.scale * zoomScale;
 
-    // Ajouter le déplacement
-    final newScreenPoint = Point(
-      startScreenPoint.x + delta.dx,
-      startScreenPoint.y + delta.dy,
+    const rotationHandleDistance = 40.0;
+    final displayHeight = widget.overlayData.imageHeight;
+
+    // Position de la poignée en coordonnées locales (avant rotation)
+    final localRotationHandleOffset = Offset(0, -displayHeight / 2 - rotationHandleDistance);
+
+    // Appliquer la rotation
+    final rotationRad = widget.overlayData.rotation * (pi / 180);
+    final cosTheta = cos(rotationRad);
+    final sinTheta = sin(rotationRad);
+
+    final rotatedX = localRotationHandleOffset.dx * cosTheta - localRotationHandleOffset.dy * sinTheta;
+    final rotatedY = localRotationHandleOffset.dx * sinTheta + localRotationHandleOffset.dy * cosTheta;
+
+    // Appliquer l'échelle
+    final scaledOffset = Offset(rotatedX * finalScale, rotatedY * finalScale);
+
+    // Position finale de la poignée en coordonnées écran
+    final rotationHandleScreen = Offset(
+      centerPoint.x + scaledOffset.dx,
+      centerPoint.y + scaledOffset.dy,
     );
 
-    // Convertir la nouvelle position écran en coordonnées géographiques
-    final newLatLng = camera.pointToLatLng(newScreenPoint);
+    // Vérifier si on touche la poignée de rotation
+    if (_isPointOnRotationHandle(event.localPosition, rotationHandleScreen, finalScale)) {
+      setState(() {
+        _isRotating = true;
+        _initialRotation = widget.overlayData.rotation;
 
-    // Notifier le parent du changement de position
-    widget.onPositionChanged?.call(newLatLng);
+        // Calculer l'angle initial entre le centre et le point touché
+        final dx = event.localPosition.dx - centerPoint.x;
+        final dy = event.localPosition.dy - centerPoint.y;
+        _initialAngle = atan2(dy, dx) * 180 / pi;
+      });
+      // Notifier qu'une interaction a commencé
+      widget.onInteractionChanged?.call(true);
+    } else {
+      setState(() {
+        _isRotating = false;
+        _dragStartPosition = event.localPosition;
+        _overlayStartPosition = widget.overlayData.position;
+      });
+      // Notifier qu'une interaction a commencé
+      widget.onInteractionChanged?.call(true);
+    }
   }
 
-  void _onPanEnd(DragEndDetails details) {
+  void _onPointerMove(PointerMoveEvent event) {
+    if (!widget.isEditMode) return;
+
+    final camera = MapCamera.of(context);
+
+    if (_isRotating) {
+      // Mode rotation
+      final centerPoint = camera.latLngToScreenPoint(widget.overlayData.position);
+
+      // Calculer l'angle actuel entre le centre et le point touché
+      final dx = event.localPosition.dx - centerPoint.x;
+      final dy = event.localPosition.dy - centerPoint.y;
+      final currentAngle = atan2(dy, dx) * 180 / pi;
+
+      // Calculer la différence d'angle
+      final angleDelta = currentAngle - _initialAngle!;
+
+      // Nouvelle rotation
+      final newRotation = _initialRotation! + angleDelta;
+
+      // Notifier le parent du changement de rotation
+      widget.onRotationChanged?.call(newRotation);
+    } else {
+      // Mode déplacement
+      if (_dragStartPosition == null || _overlayStartPosition == null) return;
+
+      // Calculer le déplacement en pixels
+      final delta = event.localPosition - _dragStartPosition!;
+
+      // Convertir la position de départ de l'overlay en coordonnées écran
+      final startScreenPoint = camera.latLngToScreenPoint(_overlayStartPosition!);
+
+      // Ajouter le déplacement
+      final newScreenPoint = Point(
+        startScreenPoint.x + delta.dx,
+        startScreenPoint.y + delta.dy,
+      );
+
+      // Convertir la nouvelle position écran en coordonnées géographiques
+      final newLatLng = camera.pointToLatLng(newScreenPoint);
+
+      // Notifier le parent du changement de position
+      widget.onPositionChanged?.call(newLatLng);
+    }
+  }
+
+  void _onPointerUp(PointerUpEvent event) {
     setState(() {
+      _isRotating = false;
       _dragStartPosition = null;
       _overlayStartPosition = null;
+      _initialRotation = null;
+      _initialAngle = null;
     });
+    // Notifier que l'interaction est terminée
+    widget.onInteractionChanged?.call(false);
+  }
+
+  void _onPointerCancel(PointerCancelEvent event) {
+    setState(() {
+      _isRotating = false;
+      _dragStartPosition = null;
+      _overlayStartPosition = null;
+      _initialRotation = null;
+      _initialAngle = null;
+    });
+    // Notifier que l'interaction est terminée
+    widget.onInteractionChanged?.call(false);
   }
 
   @override
@@ -136,12 +250,14 @@ class _ImageOverlayLayerState extends State<ImageOverlayLayer> {
       size: Size.infinite,
     );
 
-    // En mode édition, envelopper dans un GestureDetector pour le drag
+    // En mode édition, envelopper dans un Listener pour capturer les événements pointer
     if (widget.isEditMode) {
-      return GestureDetector(
-        onPanStart: _onPanStart,
-        onPanUpdate: _onPanUpdate,
-        onPanEnd: _onPanEnd,
+      return Listener(
+        onPointerDown: _onPointerDown,
+        onPointerMove: _onPointerMove,
+        onPointerUp: _onPointerUp,
+        onPointerCancel: _onPointerCancel,
+        behavior: HitTestBehavior.translucent,
         child: customPaint,
       );
     }
@@ -325,6 +441,48 @@ class ImageOverlayPainter extends CustomPainter {
         Offset(dstRect.right, (dstRect.top + dstRect.bottom) / 2),
         handleRadius * 0.7,
         middleHandlePaint,
+      );
+
+      // Poignée de rotation (au-dessus du centre haut)
+      const rotationHandleDistance = 40.0; // Distance depuis le bord supérieur
+      final rotationHandleCenter = Offset(
+        (dstRect.left + dstRect.right) / 2,
+        dstRect.top - rotationHandleDistance,
+      );
+
+      // Ligne connectant la poignée de rotation au bord supérieur
+      final linePaint = Paint()
+        ..color = Colors.blue.withValues(alpha: 0.6)
+        ..strokeWidth = 2.0
+        ..style = PaintingStyle.stroke;
+
+      canvas.drawLine(
+        Offset((dstRect.left + dstRect.right) / 2, dstRect.top),
+        rotationHandleCenter,
+        linePaint,
+      );
+
+      // Cercle de la poignée de rotation
+      final rotationHandlePaint = Paint()
+        ..color = Colors.green
+        ..style = PaintingStyle.fill;
+
+      canvas.drawCircle(
+        rotationHandleCenter,
+        handleRadius * 1.2,
+        rotationHandlePaint,
+      );
+
+      // Bordure de la poignée de rotation
+      final rotationHandleBorderPaint = Paint()
+        ..color = Colors.white
+        ..strokeWidth = 2.0
+        ..style = PaintingStyle.stroke;
+
+      canvas.drawCircle(
+        rotationHandleCenter,
+        handleRadius * 1.2,
+        rotationHandleBorderPaint,
       );
 
       // Afficher les coordonnées géographiques aux 4 coins

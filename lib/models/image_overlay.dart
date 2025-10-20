@@ -9,7 +9,7 @@ import 'package:latlong2/latlong.dart';
 ///
 /// Conventions d'unités:
 /// - [rotation]: Stockée en DEGRÉS (0-360°)
-/// - [referenceMapRotation]: Stockée en RADIANS (même format que MapCamera.rotation)
+/// - [referenceMapRotation]: Stockée en DEGRÉS (même format que MapCamera.rotation)
 /// - [position]: Coordonnées géographiques (latitude, longitude)
 /// - [scale]: Facteur d'échelle (1.0 = taille normale)
 /// - [imageWidth], [imageHeight]: Dimensions d'affichage en pixels logiques
@@ -44,7 +44,7 @@ class ImageOverlayData {
   /// Niveau de zoom de référence au moment du verrouillage
   final double referenceZoom;
 
-  /// Rotation de la carte de référence en RADIANS au moment du verrouillage
+  /// Rotation de la carte de référence en DEGRÉS au moment du verrouillage
   /// (utilise les mêmes unités que MapCamera.rotation)
   ///
   /// Note: Cette valeur n'est PAS sauvegardée en JSON pour éviter les problèmes

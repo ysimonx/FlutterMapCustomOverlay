@@ -15,10 +15,12 @@ https://github.com/user-attachments/assets/53cff802-3ea9-432c-8596-2c0be757b453
   - Bouton pour recentrer sur votre position actuelle
 - Ajout d'images PNG en overlay sur la carte
 - Manipulation de l'overlay :
-  - Déplacement
-  - Rotation
-  - Redimensionnement (zoom)
+  - **Déplacement** : glisser-déposer direct en mode édition
+  - **Rotation** : boutons ou poignée interactive (verte au-dessus de l'image)
+  - **Redimensionnement (zoom)** : boutons ou poignées aux 4 coins (bleues)
+  - Ajustement de l'opacité (0-100%)
 - Conservation des proportions de l'image d'origine
+- Affichage des coordonnées GPS (latitude/longitude) aux 4 coins de l'image
 - Sauvegarde de la configuration de l'overlay
 - Verrouillage de l'overlay pour navigation normale de la carte
 - Compatible Web, Android et iOS
@@ -64,10 +66,16 @@ flutter run -d ios
 
 Au démarrage, l'application demande l'autorisation d'accès à votre position et centre automatiquement la carte sur votre emplacement actuel.
 
-**Boutons de contrôle de la carte** (en haut à droite) :
-- **+** : Zoom avant sur la carte
-- **-** : Zoom arrière sur la carte
-- **📍** : Recentrer la carte sur votre position actuelle
+**Boutons de contrôle de la carte** :
+- *En haut à droite* :
+  - **+** : Zoom avant sur la carte
+  - **-** : Zoom arrière sur la carte
+  - **📍** : Recentrer la carte sur votre position actuelle (ou sur l'overlay si verrouillé)
+- *En bas à gauche* :
+  - **Rotation gauche** : Pivoter la carte de 30° dans le sens anti-horaire
+  - **Rotation droite** : Pivoter la carte de 30° dans le sens horaire
+  - **Boussole** : Réinitialiser la rotation à 0° (nord vers le haut)
+  - **Indicateur d'angle** : Affiche l'angle de rotation actuel de la carte en degrés
 
 ### 2. Ajouter une image
 
@@ -77,13 +85,26 @@ Au démarrage, l'application demande l'autorisation d'accès à votre position e
 
 ### 3. Éditer l'overlay
 
-Une fois l'image ajoutée, le mode édition s'active automatiquement avec un panneau de contrôle :
+Une fois l'image ajoutée, le mode édition s'active automatiquement. Vous disposez de **deux méthodes** pour manipuler l'image :
 
-- **Rotation** : Utilisez les boutons avec flèches circulaires
-- **Échelle** : Utilisez les boutons zoom + et -
-- **Déplacement** : Utilisez les flèches directionnelles
+#### Méthode 1 : Manipulation directe (poignées)
+- **Déplacement** : Cliquez et glissez n'importe où sur l'image
+- **Rotation** : Utilisez la poignée verte au-dessus de l'image (reliée par une ligne bleue)
+- **Redimensionnement** : Utilisez les poignées bleues aux 4 coins de l'image
 
-L'overlay est entouré d'une bordure bleue avec des poignées aux coins en mode édition.
+#### Méthode 2 : Panneau de contrôle (boutons)
+Un panneau de contrôle compact s'affiche en bas de l'écran avec :
+- **Rotation** : Boutons avec flèches circulaires (rotation par pas de 1°)
+- **Échelle** : Boutons zoom + et - (ajustement par pas de 0.05)
+- **Déplacement** : Boutons avec flèches directionnelles (déplacement de 10 pixels)
+- **Opacité** : Curseur pour ajuster la transparence de l'image (0-100%)
+
+En mode édition, l'overlay affiche :
+- Une bordure bleue
+- 4 poignées bleues aux coins (pour le redimensionnement)
+- 4 poignées blanches au milieu des côtés (visuelles)
+- 1 poignée verte au-dessus (pour la rotation)
+- Les coordonnées GPS (latitude/longitude) aux 4 coins de l'image
 
 ### 4. Sauvegarder
 
@@ -92,9 +113,11 @@ Cliquez sur l'icône de sauvegarde dans la barre d'application pour enregistrer 
 ### 5. Verrouiller
 
 Cliquez sur l'icône de cadenas pour verrouiller l'overlay :
-- En mode verrouillé, l'overlay reste fixe sur la carte
-- Vous pouvez naviguer normalement sur la carte
-- L'overlay se déplace avec la carte
+- En mode verrouillé, l'overlay devient fixe géographiquement
+- Vous pouvez naviguer normalement sur la carte (zoom, déplacement, rotation)
+- L'overlay suit automatiquement les mouvements et rotations de la carte
+- Le mode édition se désactive automatiquement lors du verrouillage
+- Quand vous déverrouillez, la rotation actuelle de l'overlay est conservée
 
 ### 6. Supprimer
 
@@ -121,7 +144,8 @@ Modèle de données stockant la configuration de l'overlay:
 - **Rotation en DEGRÉS** (0-360°)
 - Échelle et dimensions d'affichage
 - État de verrouillage
-- **Rotation de référence de la carte en RADIANS** (pour le mode verrouillé)
+- **Rotation de référence de la carte en DEGRÉS** (pour le mode verrouillé)
+- **Opacité** (0.0-1.0)
 
 #### `MapScreen` (screens/map_screen.dart)
 Écran principal gérant:
@@ -136,7 +160,12 @@ Widget de rendu CustomPaint gérant:
 - Conversion coordonnées géographiques ↔ écran
 - Application des transformations (rotation, zoom, translation)
 - Rendu avec Canvas API
-- Mode édition avec poignées visuelles
+- Mode édition avec poignées visuelles interactives :
+  - Poignée de rotation (verte, au-dessus de l'image)
+  - Poignées de redimensionnement (bleues, aux 4 coins)
+  - Glisser-déposer pour le déplacement
+- Détection des interactions tactiles/souris avec calculs géométriques
+- Désactivation temporaire de la carte pendant les manipulations de l'overlay
 
 ## Dépendances principales
 
@@ -149,6 +178,32 @@ Widget de rendu CustomPaint gérant:
 
 ## Notes techniques
 
+### Interaction utilisateur avec l'overlay
+
+L'overlay propose **deux modes d'interaction** en mode édition :
+
+#### 1. Manipulation directe (drag & drop, poignées)
+- **Glisser-déposer** : Cliquez n'importe où sur l'image et déplacez-la
+- **Poignée de rotation** : Cercle vert au-dessus de l'image, relié par une ligne bleue
+  - Distance de détection agrandie pour faciliter l'utilisation
+  - Rotation en temps réel suivant le mouvement de la souris/doigt
+- **Poignées de redimensionnement** : Cercles bleus aux 4 coins
+  - Calcul de la distance entre le centre et le coin pour déterminer le facteur d'échelle
+  - Redimensionnement proportionnel en temps réel
+
+#### 2. Interactions prioritaires
+Le système détecte les interactions dans cet ordre :
+1. **Coins** (priorité 1) : Redimensionnement
+2. **Poignée verte** (priorité 2) : Rotation
+3. **Ailleurs sur l'image** (priorité 3) : Déplacement
+
+Pendant une interaction, la carte est temporairement désactivée pour éviter les conflits.
+
+#### 3. Calculs géométriques
+- **Détection de poignée** : Calcul de distance euclidienne avec zone de détection élargie
+- **Transformation inverse** : Pour détecter les clics, les coordonnées écran sont transformées dans le système local de l'image (inversion de l'échelle puis de la rotation)
+- **Affichage des coordonnées GPS** : Les 4 coins de l'image affichent leur latitude/longitude en temps réel
+
 ### Gestion des rotations
 
 ⚠️ **IMPORTANT**: Ce projet utilise **deux systèmes d'unités** pour les rotations.
@@ -156,18 +211,21 @@ Widget de rendu CustomPaint gérant:
 #### 1. DEGRÉS (0-360°)
 **Utilisé pour:**
 - Stockage dans `ImageOverlayData.rotation`
-- Interface utilisateur (boutons ±15°, affichage)
+- Interface utilisateur (boutons ±1°, affichage)
 - Paramètre de la méthode `_rotateImage(double deltaDegre)`
+- Rotation de la carte (`MapCamera.rotation` stocke maintenant en degrés)
 - `ImageOverlayData.referenceMapRotation` (référence pour le mode verrouillé)
 
 **Raison:** Plus intuitif pour l'utilisateur (30° est plus parlant que 0.524 radians)
 
 #### 2. RADIANS (0-2π)
 **Utilisé pour:**
-- `MapCamera.rotation` (flutter_map utilise toujours des radians)
 - `Canvas.rotate()` (API de dessin Flutter standard)
+- Calculs trigonométriques (sin, cos, atan2)
 
 **Raison:** Standard pour les APIs de bas niveau et les calculs mathématiques
+
+⚠️ **Note importante** : Le projet a évolué pour utiliser principalement des degrés. `MapCamera.rotation` retourne maintenant des degrés directement.
 
 ### Conversions
 
@@ -181,14 +239,32 @@ double degrees = radians * (180 / pi);
 
 ### Flux de rotation de l'overlay
 
-1. **Utilisateur clique sur bouton de rotation (±15°)**
+#### A. Par boutons (±1°)
+1. **Utilisateur clique sur bouton de rotation**
    ```dart
-   _rotateImage(15.0); // Delta en degrés
+   _rotateImage(1.0); // Delta en degrés
    ```
 
 2. **Mise à jour du modèle (en degrés)**
    ```dart
    rotation = currentRotation + deltaDegre; // Stocké en degrés
+   ```
+
+#### B. Par poignée verte (drag & drop)
+1. **Détection du clic sur la poignée de rotation**
+   - Calcul de la distance entre le point cliqué et la position de la poignée verte
+   - Zone de détection élargie (1.5x le rayon) pour faciliter l'utilisation
+
+2. **Suivi du mouvement en temps réel**
+   ```dart
+   // Calcul de l'angle actuel entre le centre et le curseur
+   final currentAngle = atan2(dy, dx) * 180 / pi;
+
+   // Calcul de la différence d'angle depuis le début du drag
+   final angleDelta = currentAngle - _initialAngle!;
+
+   // Nouvelle rotation = rotation initiale + delta
+   final newRotation = _initialRotation! + angleDelta;
    ```
 
 3. **Rendu dans ImageOverlayPainter (conversion en radians)**
@@ -198,9 +274,8 @@ double degrees = radians * (180 / pi);
 
 4. **En mode verrouillé: synchronisation avec la carte**
    ```dart
-   // La carte rotate en degres
-   double mapDeltaDegrees =
-       (currentMapRotation - referenceMapRotation) ;
+   // La carte rotate en degrés
+   final mapDeltaDegrees = currentMapRotation - referenceMapRotation;
 
    // Combiné avec la rotation de l'overlay (en degrés)
    finalRotation = overlayRotation + mapDeltaDegrees;
@@ -211,14 +286,18 @@ double degrees = radians * (180 / pi);
 Les boutons de rotation de la carte (en bas à gauche) utilisent ±30°:
 ```dart
 void _rotateMapLeft() {
-  final currentRotation = mapController.camera.rotation; // en radians
-  const delta = -30.0; // en degrés
+  final currentRotation = mapController.camera.rotation; // en degrés
+  const delta = -30; // en degrés
   final newRotation = currentRotation + delta;
   mapController.moveAndRotate(center, zoom, newRotation);
 }
 ```
 
-Un indicateur d'angle en temps réel affiche la rotation actuelle de la carte en degrés.
+**Contrôles de rotation de la carte** :
+- **Bouton gauche** : Rotation anti-horaire de 30°
+- **Bouton droit** : Rotation horaire de 30°
+- **Bouton boussole** : Réinitialisation à 0° (nord vers le haut)
+- **Indicateur d'angle** : Affiche en temps réel la rotation actuelle de la carte en degrés dans un encadré blanc
 
 ### Points d'attention
 
@@ -235,6 +314,7 @@ Map<String, dynamic> toJson() {
   return {
     'rotation': rotation, // en degrés ✓
     'referenceZoom': referenceZoom,
+    'opacity': opacity, // opacité (0.0-1.0) ✓
     // referenceMapRotation omis volontairement ✓
   };
 }
@@ -257,11 +337,15 @@ LatLng latLng = camera.pointToLatLng(screenPoint);
 
 - L'image conserve ses proportions d'origine
 - Les transformations sont appliquées via Canvas avec matrice de transformation
-- La sauvegarde utilise SharedPreferences avec encodage JSON et Base64
+- La sauvegarde utilise SharedPreferences avec encodage JSON et Base64 (inclut l'opacité)
 - L'overlay suit les mouvements et rotations de la carte en mode verrouillé
 - Zoom adaptatif: `zoomScale = pow(2.0, currentZoom - referenceZoom)`
 - La géolocalisation demande les permissions appropriées au démarrage
-- Si la géolocalisation échoue, la carte se centre par défaut sur Paris
+- Si la géolocalisation échoue, la carte se centre par défaut sur ITER Cadarache
+- En mode verrouillé, le bouton de position centre la carte sur l'overlay (pas sur la position GPS)
+- Gestion des événements pointer (PointerDown, PointerMove, PointerUp) pour les interactions tactiles/souris
+- Désactivation automatique des interactions carte pendant la manipulation de l'overlay (`_isInteractingWithOverlay`)
+- StreamBuilder pour forcer le rebuild de l'overlay lors des changements de carte (zoom, déplacement, rotation)
 
 ## Limitations connues
 
@@ -273,9 +357,12 @@ LatLng latLng = camera.pointToLatLng(screenPoint);
 
 - Support de plusieurs overlays simultanés
 - Support d'autres formats d'image (JPEG, SVG)
-- Gestion par glisser-déposer pour le déplacement
-- Ajustement de l'opacité de l'overlay
+- ~~Gestion par glisser-déposer pour le déplacement~~ ✅ **Implémenté**
+- ~~Ajustement de l'opacité de l'overlay~~ ✅ **Implémenté**
+- ~~Manipulation par poignées (rotation, zoom)~~ ✅ **Implémenté**
 - Export/import de configurations
+- Annulation/Rétablissement (undo/redo)
+- Historique des modifications
 
 ## Licence
 

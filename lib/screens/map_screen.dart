@@ -31,10 +31,11 @@ import '../widgets/image_overlay_layer.dart';
 ///    - Plus intuitif pour l'utilisateur
 ///
 /// 2. **RADIANS** (0-2π):
-///    - MapController et MapCamera ([MapCamera.rotation])
-///    - Référence de rotation de la carte ([ImageOverlayData.referenceMapRotation])
-///    - Canvas.rotate() dans le painter
+///    - Canvas.rotate() dans le painter (nécessite conversion depuis degrés)
+///    - Calculs trigonométriques internes (sin, cos, atan2)
 ///    - Standard pour les API de bas niveau
+///
+/// Note: MapCamera.rotation retourne maintenant des degrés directement
 ///
 /// ### Conversions:
 /// - Degrés → Radians: `angle * (pi / 180)`

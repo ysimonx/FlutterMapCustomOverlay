@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -12,7 +13,7 @@ import '../widgets/image_overlay_layer.dart';
 
 /// Écran principal de l'application avec carte interactive et overlay d'image.
 ///
-/// Cette application permet de superposer une image PNG sur une carte OpenStreetMap
+/// Cette application permet de superposer une image (PNG, JPEG, etc.) sur une carte OpenStreetMap
 /// avec les fonctionnalités suivantes:
 /// - Sélection d'image depuis le système de fichiers
 /// - Positionnement géographique de l'image
@@ -59,14 +60,33 @@ class _MapScreenState extends State<MapScreen> {
   bool _isEditMode = false;
   bool _isLocked = false;
   bool _isInteractingWithOverlay = false;
+  bool _isLoadingImage = false;
 
-  LatLng _currentCenter = const LatLng(43.7084, 5.7737); // ITER Cadarache par défaut
+  LatLng _currentCenter =
+      const LatLng(43.7084, 5.7737); // ITER Cadarache par défaut
 
   @override
   void initState() {
     super.initState();
     _getCurrentLocation();
     _loadSavedOverlay();
+  }
+
+  /// Décode une image dans un isolate séparé pour ne pas bloquer l'UI
+  static Future<Map<String, dynamic>?> _decodeImageInIsolate(Uint8List bytes) async {
+    return compute(_decodeImage, bytes);
+  }
+
+  /// Fonction top-level pour décoder l'image (nécessaire pour compute)
+  static Map<String, dynamic>? _decodeImage(Uint8List bytes) {
+    final image = img.decodeImage(bytes);
+    if (image != null) {
+      return {
+        'width': image.width,
+        'height': image.height,
+      };
+    }
+    return null;
   }
 
   Future<void> _getCurrentLocation() async {
@@ -218,9 +238,28 @@ class _MapScreenState extends State<MapScreen> {
 
       if (result != null && result.files.single.bytes != null) {
         final bytes = result.files.single.bytes!;
-        final image = img.decodeImage(bytes);
 
-        if (image != null) {
+        // Activer l'indicateur de chargement
+        if (mounted) {
+          setState(() {
+            _isLoadingImage = true;
+          });
+        }
+
+        debugPrint('Début du décodage de l\'image...');
+
+        // Attendre un frame pour que l'animation s'affiche
+        await Future.delayed(const Duration(milliseconds: 50));
+
+        // Décoder l'image dans un isolate séparé pour ne pas bloquer l'UI
+        final imageInfo = await _decodeImageInIsolate(bytes);
+
+        debugPrint('Décodage terminé: $imageInfo');
+
+        // Assurer un délai minimum pour que l'utilisateur voie l'animation
+        await Future.delayed(const Duration(milliseconds: 300));
+
+        if (imageInfo != null && mounted) {
           final center = _mapController.camera.center;
 
           // Calculer une taille d'affichage appropriée
@@ -231,7 +270,7 @@ class _MapScreenState extends State<MapScreen> {
               (screenWidth < screenHeight ? screenWidth : screenHeight) * 0.6;
 
           // Calculer le ratio de l'image
-          final imageRatio = image.width / image.height;
+          final imageRatio = imageInfo['width'] / imageInfo['height'];
 
           // Calculer la taille d'affichage en conservant le ratio
           double displayWidth;
@@ -263,10 +302,18 @@ class _MapScreenState extends State<MapScreen> {
             );
             _isEditMode = true;
             _isLocked = false;
+            _isLoadingImage = false;
+          });
+        } else if (mounted) {
+          setState(() {
+            _isLoadingImage = false;
           });
         }
       }
     } catch (e) {
+      setState(() {
+        _isLoadingImage = false;
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Erreur lors de la sélection: $e')),
@@ -340,7 +387,8 @@ class _MapScreenState extends State<MapScreen> {
           // Quand on déverrouille, conserver la rotation actuelle
           // Calculer la rotation finale qui était appliquée en mode verrouillé
           final currentMapRotation = _mapController.camera.rotation;
-          final mapRotationDelta = currentMapRotation - _overlay!.referenceMapRotation;
+          final mapRotationDelta =
+              currentMapRotation - _overlay!.referenceMapRotation;
           final finalRotation = _overlay!.rotation + mapRotationDelta;
 
           _overlay = _overlay!.copyWith(
@@ -611,12 +659,13 @@ class _MapScreenState extends State<MapScreen> {
           ),
           if (_overlay != null && _isEditMode && !_isLocked)
             Positioned(
-              bottom: 20,
+              bottom: 100, // Augmenté pour laisser de la place au bouton "Terminer"
               left: 80,
               right: 20,
               child: Card(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12.0, vertical: 8.0),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -684,7 +733,8 @@ class _MapScreenState extends State<MapScreen> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   IconButton(
-                                    icon: const Icon(Icons.arrow_back, size: 16),
+                                    icon:
+                                        const Icon(Icons.arrow_back, size: 16),
                                     iconSize: 16,
                                     padding: const EdgeInsets.all(2),
                                     constraints: const BoxConstraints(),
@@ -693,7 +743,8 @@ class _MapScreenState extends State<MapScreen> {
                                   ),
                                   const SizedBox(width: 16),
                                   IconButton(
-                                    icon: const Icon(Icons.arrow_forward, size: 16),
+                                    icon: const Icon(Icons.arrow_forward,
+                                        size: 16),
                                     iconSize: 16,
                                     padding: const EdgeInsets.all(2),
                                     constraints: const BoxConstraints(),
@@ -703,7 +754,8 @@ class _MapScreenState extends State<MapScreen> {
                                 ],
                               ),
                               IconButton(
-                                icon: const Icon(Icons.arrow_downward, size: 16),
+                                icon:
+                                    const Icon(Icons.arrow_downward, size: 16),
                                 iconSize: 16,
                                 padding: const EdgeInsets.all(2),
                                 constraints: const BoxConstraints(),
@@ -746,13 +798,42 @@ class _MapScreenState extends State<MapScreen> {
                 ),
               ),
             ),
+          // Indicateur de chargement
+          if (_isLoadingImage)
+            Container(
+              color: Colors.black54,
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 80,
+                      height: 80,
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        strokeWidth: 6,
+                      ),
+                    ),
+                    SizedBox(height: 24),
+                    Text(
+                      'Chargement de l\'image...',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
       floatingActionButton: _overlay == null
           ? FloatingActionButton.extended(
               onPressed: _pickImage,
               icon: const Icon(Icons.add_photo_alternate),
-              label: const Text('Ajouter une image'),
+              label: const Text('Ajouter un overlay (PNG, JPEG, etc.)'),
             )
           : !_isLocked && !_isEditMode
               ? FloatingActionButton.extended(
@@ -769,6 +850,14 @@ class _MapScreenState extends State<MapScreen> {
                       onPressed: () {
                         setState(() {
                           _isEditMode = false;
+                          // Verrouiller automatiquement l'overlay
+                          _isLocked = true;
+                          if (_overlay != null) {
+                            _overlay = _overlay!.copyWith(
+                              isLocked: true,
+                              referenceMapRotation: _mapController.camera.rotation,
+                            );
+                          }
                         });
                       },
                       icon: const Icon(Icons.check),

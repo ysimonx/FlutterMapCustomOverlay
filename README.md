@@ -79,7 +79,7 @@ Au démarrage, l'application demande l'autorisation d'accès à votre position e
 
 ### 2. Ajouter une image
 
-1. Cliquez sur le bouton "Ajouter une image" (flottant en bas à droite)
+1. Cliquez sur le bouton "Ajouter un overlay (plan ou image)" (flottant en bas à droite)
 2. Sélectionnez un fichier PNG depuis votre appareil
 3. L'image apparaît au centre de la carte actuelle
 

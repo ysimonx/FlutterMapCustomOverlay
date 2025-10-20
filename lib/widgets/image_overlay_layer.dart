@@ -35,6 +35,9 @@ class ImageOverlayLayer extends StatefulWidget {
   /// Callback appelé quand l'overlay est pivoté via la poignée de rotation
   final Function(double newRotation)? onRotationChanged;
 
+  /// Callback appelé quand l'overlay est redimensionné via un coin
+  final Function(double newScale)? onScaleChanged;
+
   /// Callback appelé pour indiquer qu'une interaction est en cours (pour désactiver la carte)
   final Function(bool isInteracting)? onInteractionChanged;
 
@@ -44,6 +47,7 @@ class ImageOverlayLayer extends StatefulWidget {
     this.isEditMode = false,
     this.onPositionChanged,
     this.onRotationChanged,
+    this.onScaleChanged,
     this.onInteractionChanged,
   });
 
@@ -56,8 +60,11 @@ class _ImageOverlayLayerState extends State<ImageOverlayLayer> {
   Offset? _dragStartPosition;
   LatLng? _overlayStartPosition;
   bool _isRotating = false;
+  bool _isScaling = false;
   double? _initialRotation;
   double? _initialAngle;
+  double? _initialScale;
+  double? _initialDistance;
 
   @override
   void initState() {
@@ -103,6 +110,29 @@ class _ImageOverlayLayerState extends State<ImageOverlayLayer> {
     return distance <= (rotationHandleSize * scale * 1.5); // Zone de détection plus large
   }
 
+  /// Vérifie si le point touché est sur un des coins de l'image
+  /// Retourne l'offset du coin touché ou null
+  Offset? _getCornerIfTouched(Offset localPoint, Rect dstRect, double finalScale) {
+    const handleRadius = 10.0;
+    const detectionRadius = handleRadius * 1.5;
+
+    final corners = [
+      Offset(dstRect.left, dstRect.top), // Coin haut-gauche
+      Offset(dstRect.right, dstRect.top), // Coin haut-droit
+      Offset(dstRect.left, dstRect.bottom), // Coin bas-gauche
+      Offset(dstRect.right, dstRect.bottom), // Coin bas-droit
+    ];
+
+    for (final corner in corners) {
+      final distance = (localPoint - corner).distance;
+      if (distance <= detectionRadius) {
+        return corner;
+      }
+    }
+
+    return null;
+  }
+
   void _onPointerDown(PointerDownEvent event) {
     if (!widget.isEditMode) return;
 
@@ -118,21 +148,61 @@ class _ImageOverlayLayerState extends State<ImageOverlayLayer> {
     final finalScale = widget.overlayData.scale * zoomScale;
 
     const rotationHandleDistance = 40.0;
+    final displayWidth = widget.overlayData.imageWidth;
     final displayHeight = widget.overlayData.imageHeight;
 
-    // Position de la poignée en coordonnées locales (avant rotation)
+    // Rectangle de l'image en coordonnées locales (avant rotation et échelle)
+    final dstRect = Rect.fromLTWH(
+      -displayWidth / 2,
+      -displayHeight / 2,
+      displayWidth,
+      displayHeight,
+    );
+
+    // Calculer la position du point touché dans le système de coordonnées de l'image
+    // (centré sur l'overlay, avant rotation et échelle)
+    final dx = event.localPosition.dx - centerPoint.x;
+    final dy = event.localPosition.dy - centerPoint.y;
+
+    // Inverser l'échelle
+    final localX = dx / finalScale;
+    final localY = dy / finalScale;
+
+    // Inverser la rotation
+    final rotationRad = widget.overlayData.rotation * (pi / 180);
+    final cosTheta = cos(-rotationRad);
+    final sinTheta = sin(-rotationRad);
+
+    final unrotatedX = localX * cosTheta - localY * sinTheta;
+    final unrotatedY = localX * sinTheta + localY * cosTheta;
+
+    final localPoint = Offset(unrotatedX, unrotatedY);
+
+    // Vérifier si on touche un coin (priorité 1)
+    final touchedCorner = _getCornerIfTouched(localPoint, dstRect, finalScale);
+    if (touchedCorner != null) {
+      setState(() {
+        _isScaling = true;
+        _isRotating = false;
+        _initialScale = widget.overlayData.scale;
+
+        // Calculer la distance initiale entre le centre et le coin touché
+        _initialDistance = touchedCorner.distance;
+      });
+      // Notifier qu'une interaction a commencé
+      widget.onInteractionChanged?.call(true);
+      return;
+    }
+
+    // Position de la poignée de rotation en coordonnées locales (avant rotation)
     final localRotationHandleOffset = Offset(0, -displayHeight / 2 - rotationHandleDistance);
 
-    // Appliquer la rotation
-    final rotationRad = widget.overlayData.rotation * (pi / 180);
-    final cosTheta = cos(rotationRad);
-    final sinTheta = sin(rotationRad);
-
-    final rotatedX = localRotationHandleOffset.dx * cosTheta - localRotationHandleOffset.dy * sinTheta;
-    final rotatedY = localRotationHandleOffset.dx * sinTheta + localRotationHandleOffset.dy * cosTheta;
+    // Appliquer la rotation à la poignée
+    final rotatedHandleX = localRotationHandleOffset.dx * cos(rotationRad) - localRotationHandleOffset.dy * sin(rotationRad);
+    final rotatedHandleY = localRotationHandleOffset.dx * sin(rotationRad) + localRotationHandleOffset.dy * cos(rotationRad);
 
     // Appliquer l'échelle
-    final scaledOffset = Offset(rotatedX * finalScale, rotatedY * finalScale);
+    final scaledOffset = Offset(rotatedHandleX * finalScale, rotatedHandleY * finalScale);
 
     // Position finale de la poignée en coordonnées écran
     final rotationHandleScreen = Offset(
@@ -140,22 +210,23 @@ class _ImageOverlayLayerState extends State<ImageOverlayLayer> {
       centerPoint.y + scaledOffset.dy,
     );
 
-    // Vérifier si on touche la poignée de rotation
+    // Vérifier si on touche la poignée de rotation (priorité 2)
     if (_isPointOnRotationHandle(event.localPosition, rotationHandleScreen, finalScale)) {
       setState(() {
         _isRotating = true;
+        _isScaling = false;
         _initialRotation = widget.overlayData.rotation;
 
         // Calculer l'angle initial entre le centre et le point touché
-        final dx = event.localPosition.dx - centerPoint.x;
-        final dy = event.localPosition.dy - centerPoint.y;
         _initialAngle = atan2(dy, dx) * 180 / pi;
       });
       // Notifier qu'une interaction a commencé
       widget.onInteractionChanged?.call(true);
     } else {
+      // Mode déplacement (priorité 3)
       setState(() {
         _isRotating = false;
+        _isScaling = false;
         _dragStartPosition = event.localPosition;
         _overlayStartPosition = widget.overlayData.position;
       });
@@ -169,7 +240,24 @@ class _ImageOverlayLayerState extends State<ImageOverlayLayer> {
 
     final camera = MapCamera.of(context);
 
-    if (_isRotating) {
+    if (_isScaling) {
+      // Mode redimensionnement
+      final centerPoint = camera.latLngToScreenPoint(widget.overlayData.position);
+
+      // Calculer la distance actuelle entre le centre et le point touché
+      final dx = event.localPosition.dx - centerPoint.x;
+      final dy = event.localPosition.dy - centerPoint.y;
+      final currentDistance = sqrt(dx * dx + dy * dy);
+
+      // Calculer le ratio de changement
+      final scaleRatio = currentDistance / _initialDistance!;
+
+      // Nouvelle échelle
+      final newScale = (_initialScale! * scaleRatio).clamp(0.1, 50.0);
+
+      // Notifier le parent du changement d'échelle
+      widget.onScaleChanged?.call(newScale);
+    } else if (_isRotating) {
       // Mode rotation
       final centerPoint = camera.latLngToScreenPoint(widget.overlayData.position);
 
@@ -213,10 +301,13 @@ class _ImageOverlayLayerState extends State<ImageOverlayLayer> {
   void _onPointerUp(PointerUpEvent event) {
     setState(() {
       _isRotating = false;
+      _isScaling = false;
       _dragStartPosition = null;
       _overlayStartPosition = null;
       _initialRotation = null;
       _initialAngle = null;
+      _initialScale = null;
+      _initialDistance = null;
     });
     // Notifier que l'interaction est terminée
     widget.onInteractionChanged?.call(false);
@@ -225,10 +316,13 @@ class _ImageOverlayLayerState extends State<ImageOverlayLayer> {
   void _onPointerCancel(PointerCancelEvent event) {
     setState(() {
       _isRotating = false;
+      _isScaling = false;
       _dragStartPosition = null;
       _overlayStartPosition = null;
       _initialRotation = null;
       _initialAngle = null;
+      _initialScale = null;
+      _initialDistance = null;
     });
     // Notifier que l'interaction est terminée
     widget.onInteractionChanged?.call(false);

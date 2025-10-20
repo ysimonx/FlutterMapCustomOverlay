@@ -496,6 +496,11 @@ class _MapScreenState extends State<MapScreen> {
                           _overlay = _overlay!.copyWith(rotation: newRotation);
                         });
                       },
+                      onScaleChanged: (newScale) {
+                        setState(() {
+                          _overlay = _overlay!.copyWith(scale: newScale);
+                        });
+                      },
                       onInteractionChanged: (isInteracting) {
                         setState(() {
                           _isInteractingWithOverlay = isInteracting;

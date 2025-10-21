@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/image_overlay.dart';
@@ -65,6 +66,9 @@ class _ImageOverlayLayerState extends State<ImageOverlayLayer> {
   double? _initialAngle;
   double? _initialScale;
   double? _initialDistance;
+
+  // Liste des zones cliquables pour copier les coordonnées (rect + latLng)
+  final List<({Rect rect, LatLng latLng})> _copyZones = [];
 
   @override
   void initState() {
@@ -136,10 +140,18 @@ class _ImageOverlayLayerState extends State<ImageOverlayLayer> {
   void _onPointerDown(PointerDownEvent event) {
     if (!widget.isEditMode) return;
 
+    // Vérifier si on clique sur une zone de copie
+    for (final zone in _copyZones) {
+      if (zone.rect.contains(event.localPosition)) {
+        _copyCoordinatesToClipboard(context, zone.latLng);
+        return; // Ne pas continuer avec les autres interactions
+      }
+    }
+
     final camera = MapCamera.of(context);
 
     // Convertir la position de l'overlay en coordonnées écran
-    final centerPoint = camera.latLngToScreenPoint(widget.overlayData.position);
+    final centerPoint = camera.latLngToScreenOffset(widget.overlayData.position);
 
     // Calculer la position de la poignée de rotation en coordonnées écran
     final currentZoom = camera.zoom;
@@ -161,8 +173,8 @@ class _ImageOverlayLayerState extends State<ImageOverlayLayer> {
 
     // Calculer la position du point touché dans le système de coordonnées de l'image
     // (centré sur l'overlay, avant rotation et échelle)
-    final dx = event.localPosition.dx - centerPoint.x;
-    final dy = event.localPosition.dy - centerPoint.y;
+    final dx = event.localPosition.dx - centerPoint.dx;
+    final dy = event.localPosition.dy - centerPoint.dy;
 
     // Inverser l'échelle
     final localX = dx / finalScale;
@@ -206,8 +218,8 @@ class _ImageOverlayLayerState extends State<ImageOverlayLayer> {
 
     // Position finale de la poignée en coordonnées écran
     final rotationHandleScreen = Offset(
-      centerPoint.x + scaledOffset.dx,
-      centerPoint.y + scaledOffset.dy,
+      centerPoint.dx + scaledOffset.dx,
+      centerPoint.dy + scaledOffset.dy,
     );
 
     // Vérifier si on touche la poignée de rotation (priorité 2)
@@ -242,11 +254,11 @@ class _ImageOverlayLayerState extends State<ImageOverlayLayer> {
 
     if (_isScaling) {
       // Mode redimensionnement
-      final centerPoint = camera.latLngToScreenPoint(widget.overlayData.position);
+      final centerPoint = camera.latLngToScreenOffset(widget.overlayData.position);
 
       // Calculer la distance actuelle entre le centre et le point touché
-      final dx = event.localPosition.dx - centerPoint.x;
-      final dy = event.localPosition.dy - centerPoint.y;
+      final dx = event.localPosition.dx - centerPoint.dx;
+      final dy = event.localPosition.dy - centerPoint.dy;
       final currentDistance = sqrt(dx * dx + dy * dy);
 
       // Calculer le ratio de changement
@@ -259,11 +271,11 @@ class _ImageOverlayLayerState extends State<ImageOverlayLayer> {
       widget.onScaleChanged?.call(newScale);
     } else if (_isRotating) {
       // Mode rotation
-      final centerPoint = camera.latLngToScreenPoint(widget.overlayData.position);
+      final centerPoint = camera.latLngToScreenOffset(widget.overlayData.position);
 
       // Calculer l'angle actuel entre le centre et le point touché
-      final dx = event.localPosition.dx - centerPoint.x;
-      final dy = event.localPosition.dy - centerPoint.y;
+      final dx = event.localPosition.dx - centerPoint.dx;
+      final dy = event.localPosition.dy - centerPoint.dy;
       final currentAngle = atan2(dy, dx) * 180 / pi;
 
       // Calculer la différence d'angle
@@ -282,16 +294,16 @@ class _ImageOverlayLayerState extends State<ImageOverlayLayer> {
       final delta = event.localPosition - _dragStartPosition!;
 
       // Convertir la position de départ de l'overlay en coordonnées écran
-      final startScreenPoint = camera.latLngToScreenPoint(_overlayStartPosition!);
+      final startScreenOffset = camera.latLngToScreenOffset(_overlayStartPosition!);
 
       // Ajouter le déplacement
-      final newScreenPoint = Point(
-        startScreenPoint.x + delta.dx,
-        startScreenPoint.y + delta.dy,
+      final newScreenOffset = Offset(
+        startScreenOffset.dx + delta.dx,
+        startScreenOffset.dy + delta.dy,
       );
 
       // Convertir la nouvelle position écran en coordonnées géographiques
-      final newLatLng = camera.pointToLatLng(newScreenPoint);
+      final newLatLng = camera.screenOffsetToLatLng(newScreenOffset);
 
       // Notifier le parent du changement de position
       widget.onPositionChanged?.call(newLatLng);
@@ -328,10 +340,177 @@ class _ImageOverlayLayerState extends State<ImageOverlayLayer> {
     widget.onInteractionChanged?.call(false);
   }
 
+  /// Copie les coordonnées dans le presse-papier et affiche un snackbar
+  void _copyCoordinatesToClipboard(BuildContext context, LatLng latLng) {
+    final coordString = '${latLng.latitude} ${latLng.longitude}';
+    Clipboard.setData(ClipboardData(text: coordString));
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(coordString),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  /// Calcule les coordonnées géographiques d'un coin de l'overlay
+  LatLng _getCornerLatLng(Offset corner, MapCamera camera, double rotationDegrees, double scale) {
+    // 1. Appliquer l'échelle
+    final scaledCorner = Offset(corner.dx * scale, corner.dy * scale);
+
+    // 2. Appliquer la rotation
+    final rotationRad = rotationDegrees * (pi / 180);
+    final cosTheta = cos(rotationRad);
+    final sinTheta = sin(rotationRad);
+
+    final rotatedX = scaledCorner.dx * cosTheta - scaledCorner.dy * sinTheta;
+    final rotatedY = scaledCorner.dx * sinTheta + scaledCorner.dy * cosTheta;
+
+    // 3. Ajouter le centre de l'image (coordonnées écran)
+    final centerPoint = camera.latLngToScreenOffset(widget.overlayData.position);
+    final screenX = centerPoint.dx + rotatedX;
+    final screenY = centerPoint.dy + rotatedY;
+
+    // Convertir les coordonnées écran en coordonnées géographiques
+    final screenOffset = Offset(screenX, screenY);
+    return camera.screenOffsetToLatLng(screenOffset);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_uiImage == null) {
       return const SizedBox.shrink();
+    }
+
+    final camera = MapCamera.of(context);
+
+    // Calculer les zones de copie si on est en mode édition
+    if (widget.isEditMode) {
+      _copyZones.clear();
+
+      final currentZoom = camera.zoom;
+      final zoomFactor = currentZoom - widget.overlayData.referenceZoom;
+      final zoomScale = pow(2.0, zoomFactor).toDouble();
+      final finalScale = widget.overlayData.scale * zoomScale;
+
+      final displayWidth = widget.overlayData.imageWidth;
+      final displayHeight = widget.overlayData.imageHeight;
+
+      // Rectangle de l'image en coordonnées locales
+      final dstRect = Rect.fromLTWH(
+        -displayWidth / 2,
+        -displayHeight / 2,
+        displayWidth,
+        displayHeight,
+      );
+
+      // Calculer la rotation finale
+      double finalRotationDegrees;
+      if (widget.overlayData.isLocked) {
+        final currentMapRotationDegrees = camera.rotation;
+        final referenceMapRotationDegrees = widget.overlayData.referenceMapRotation;
+        final mapRotationDeltaDegrees = currentMapRotationDegrees - referenceMapRotationDegrees;
+        finalRotationDegrees = widget.overlayData.rotation + mapRotationDeltaDegrees;
+      } else {
+        finalRotationDegrees = widget.overlayData.rotation;
+      }
+
+      // Les 4 coins
+      final corners = [
+        Offset(dstRect.left, dstRect.top), // Coin haut-gauche
+        Offset(dstRect.right, dstRect.top), // Coin haut-droit
+        Offset(dstRect.left, dstRect.bottom), // Coin bas-gauche
+        Offset(dstRect.right, dstRect.bottom), // Coin bas-droit
+      ];
+
+      // Calculer les zones cliquables pour chaque coin
+      // Ces zones doivent correspondre exactement aux icônes dessinées dans le painter
+      final centerPoint = camera.latLngToScreenOffset(widget.overlayData.position);
+
+      for (int i = 0; i < corners.length; i++) {
+        final corner = corners[i];
+        final latLng = _getCornerLatLng(corner, camera, finalRotationDegrees, finalScale);
+
+        // Calculer les dimensions du texte pour positionner l'icône correctement
+        final textPainter = TextPainter(
+          textDirection: TextDirection.ltr,
+          textAlign: TextAlign.center,
+          text: TextSpan(
+            text: '${latLng.latitude.toStringAsFixed(6)}\n${latLng.longitude.toStringAsFixed(6)}',
+            style: const TextStyle(fontSize: 10),
+          ),
+        );
+        textPainter.layout();
+
+        // Position du texte en coordonnées locales (relatives au coin de l'image)
+        double localTextOffsetX;
+        double localTextOffsetY;
+        switch (i) {
+          case 0: // Haut-gauche
+            localTextOffsetX = corner.dx - textPainter.width - 5;
+            localTextOffsetY = corner.dy - textPainter.height - 5;
+            break;
+          case 1: // Haut-droit
+            localTextOffsetX = corner.dx + 5;
+            localTextOffsetY = corner.dy - textPainter.height - 5;
+            break;
+          case 2: // Bas-gauche
+            localTextOffsetX = corner.dx - textPainter.width - 5;
+            localTextOffsetY = corner.dy + 5;
+            break;
+          case 3: // Bas-droit
+            localTextOffsetX = corner.dx + 5;
+            localTextOffsetY = corner.dy + 5;
+            break;
+          default:
+            localTextOffsetX = 0;
+            localTextOffsetY = 0;
+        }
+
+        // Position de l'icône en coordonnées locales
+        final iconSize = 16.0;
+        double localIconOffsetX;
+        double localIconOffsetY = localTextOffsetY + textPainter.height / 2 - iconSize / 2;
+
+        switch (i) {
+          case 0: // Haut-gauche - icône à gauche du texte
+            localIconOffsetX = localTextOffsetX - iconSize - 3;
+            break;
+          case 1: // Haut-droit - icône à droite du texte
+            localIconOffsetX = localTextOffsetX + textPainter.width + 3;
+            break;
+          case 2: // Bas-gauche - icône à gauche du texte
+            localIconOffsetX = localTextOffsetX - iconSize - 3;
+            break;
+          case 3: // Bas-droit - icône à droite du texte
+            localIconOffsetX = localTextOffsetX + textPainter.width + 3;
+            break;
+          default:
+            localIconOffsetX = 0;
+        }
+
+        // Appliquer les transformations (scale + rotation) pour obtenir la position écran finale
+        // 1. Appliquer l'échelle
+        final scaledIconX = localIconOffsetX * finalScale;
+        final scaledIconY = localIconOffsetY * finalScale;
+
+        // 2. Appliquer la rotation
+        final rotationRad = finalRotationDegrees * (pi / 180);
+        final cosTheta = cos(rotationRad);
+        final sinTheta = sin(rotationRad);
+        final rotatedIconX = scaledIconX * cosTheta - scaledIconY * sinTheta;
+        final rotatedIconY = scaledIconX * sinTheta + scaledIconY * cosTheta;
+
+        // 3. Translater au centre de l'overlay
+        final screenIconX = centerPoint.dx + rotatedIconX;
+        final screenIconY = centerPoint.dy + rotatedIconY;
+
+        _copyZones.add((
+          rect: Rect.fromLTWH(screenIconX, screenIconY, iconSize * finalScale, iconSize * finalScale),
+          latLng: latLng,
+        ));
+      }
     }
 
     final customPaint = CustomPaint(
@@ -339,7 +518,8 @@ class _ImageOverlayLayerState extends State<ImageOverlayLayer> {
         overlayData: widget.overlayData,
         uiImage: _uiImage!,
         isEditMode: widget.isEditMode,
-        camera: MapCamera.of(context),
+        camera: camera,
+        copyZones: widget.isEditMode ? _copyZones : null,
       ),
       size: Size.infinite,
     );
@@ -387,11 +567,15 @@ class ImageOverlayPainter extends CustomPainter {
   /// Caméra de la carte pour les conversions de coordonnées
   final MapCamera camera;
 
+  /// Zones cliquables pour copier les coordonnées (en mode édition)
+  final List<({Rect rect, LatLng latLng})>? copyZones;
+
   ImageOverlayPainter({
     required this.overlayData,
     required this.uiImage,
     required this.isEditMode,
     required this.camera,
+    this.copyZones,
   });
 
   @override
@@ -402,9 +586,9 @@ class ImageOverlayPainter extends CustomPainter {
       ..color = Color.fromRGBO(255, 255, 255, overlayData.opacity);
 
     // Convertir la position géographique en position écran
-    final point = camera.latLngToScreenPoint(overlayData.position);
-    final centerX = point.x;
-    final centerY = point.y;
+    final point = camera.latLngToScreenOffset(overlayData.position);
+    final centerX = point.dx;
+    final centerY = point.dy;
 
     canvas.save();
 
@@ -625,13 +809,13 @@ class ImageOverlayPainter extends CustomPainter {
       final rotatedY = scaledCorner.dx * sinTheta + scaledCorner.dy * cosTheta;
 
       // 3. Ajouter le centre de l'image (coordonnées écran)
-      final centerPoint = camera.latLngToScreenPoint(overlayData.position);
-      final screenX = centerPoint.x + rotatedX;
-      final screenY = centerPoint.y + rotatedY;
+      final centerPoint = camera.latLngToScreenOffset(overlayData.position);
+      final screenX = centerPoint.dx + rotatedX;
+      final screenY = centerPoint.dy + rotatedY;
 
       // Convertir les coordonnées écran en coordonnées géographiques
-      final point = Point(screenX, screenY);
-      final latLng = camera.pointToLatLng(point);
+      final screenOffset = Offset(screenX, screenY);
+      final latLng = camera.screenOffsetToLatLng(screenOffset);
 
       // Formater le texte
       final text =
@@ -688,6 +872,75 @@ class ImageOverlayPainter extends CustomPainter {
       }
 
       textPainter.paint(canvas, Offset(offsetX, offsetY));
+
+      // Dessiner l'icône de copie à côté du texte
+      final iconSize = 16.0;
+      double iconOffsetX;
+      double iconOffsetY = offsetY + textPainter.height / 2 - iconSize / 2;
+
+      switch (i) {
+        case 0: // Haut-gauche - icône à gauche du texte
+          iconOffsetX = offsetX - iconSize - 3;
+          break;
+        case 1: // Haut-droit - icône à droite du texte
+          iconOffsetX = offsetX + textPainter.width + 3;
+          break;
+        case 2: // Bas-gauche - icône à gauche du texte
+          iconOffsetX = offsetX - iconSize - 3;
+          break;
+        case 3: // Bas-droit - icône à droite du texte
+          iconOffsetX = offsetX + textPainter.width + 3;
+          break;
+        default:
+          iconOffsetX = 0;
+      }
+
+      // Dessiner le fond de l'icône (rectangle bleu semi-transparent)
+      final iconRect = Rect.fromLTWH(iconOffsetX, iconOffsetY, iconSize, iconSize);
+      final iconBackgroundPaint = Paint()
+        ..color = Colors.blue.withValues(alpha: 0.7)
+        ..style = PaintingStyle.fill;
+
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(iconRect, const Radius.circular(3)),
+        iconBackgroundPaint,
+      );
+
+      // Dessiner une bordure blanche
+      final iconBorderPaint = Paint()
+        ..color = Colors.white
+        ..strokeWidth = 1.0
+        ..style = PaintingStyle.stroke;
+
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(iconRect, const Radius.circular(3)),
+        iconBorderPaint,
+      );
+
+      // Dessiner l'icône de copie (deux rectangles pour symboliser le clipboard)
+      final copyIconPaint = Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5;
+
+      // Rectangle arrière (clipboard)
+      final backRect = Rect.fromLTWH(
+        iconOffsetX + 5,
+        iconOffsetY + 4,
+        iconSize - 9,
+        iconSize - 7,
+      );
+      canvas.drawRect(backRect, copyIconPaint);
+
+      // Rectangle avant (copie)
+      final frontRect = Rect.fromLTWH(
+        iconOffsetX + 3,
+        iconOffsetY + 2,
+        iconSize - 9,
+        iconSize - 7,
+      );
+      canvas.drawRect(frontRect, copyIconPaint);
+
       canvas.restore();
     }
 

@@ -11,6 +11,18 @@ import 'package:geolocator/geolocator.dart';
 import '../models/image_overlay.dart';
 import '../widgets/image_overlay_layer.dart';
 
+/// Énumération des différents styles de carte disponibles
+enum MapStyle {
+  openStreetMap('OpenStreetMap', 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'),
+  topoMap('Topo', 'https://a.tile.opentopomap.org/{z}/{x}/{y}.png'),
+  cartoLight('Carto Light', 'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'),
+  esriWorldImagery('Satellite', 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+
+  const MapStyle(this.displayName, this.urlTemplate);
+  final String displayName;
+  final String urlTemplate;
+}
+
 /// Écran principal de l'application avec carte interactive et overlay d'image.
 ///
 /// Cette application permet de superposer une image (PNG, JPEG, etc.) sur une carte OpenStreetMap
@@ -60,6 +72,7 @@ class _MapScreenState extends State<MapScreen> {
   bool _isEditMode = false;
   bool _isInteractingWithOverlay = false;
   bool _isLoadingImage = false;
+  MapStyle _currentMapStyle = MapStyle.openStreetMap;
 
   LatLng _currentCenter =
       const LatLng(43.7084, 5.7737); // ITER Cadarache par défaut
@@ -355,16 +368,16 @@ class _MapScreenState extends State<MapScreen> {
     final camera = _mapController.camera;
 
     // Obtenir la position actuelle de l'overlay en coordonnées écran
-    final currentScreenPoint = camera.latLngToScreenPoint(_overlay!.position);
+    final currentScreenOffset = camera.latLngToScreenOffset(_overlay!.position);
 
     // Ajouter le déplacement en pixels
-    final newScreenPoint = Point(
-      currentScreenPoint.x + dx,
-      currentScreenPoint.y + dy,
+    final newScreenOffset = Offset(
+      currentScreenOffset.dx + dx,
+      currentScreenOffset.dy + dy,
     );
 
     // Convertir la nouvelle position écran en coordonnées géographiques
-    final newLatLng = camera.pointToLatLng(newScreenPoint);
+    final newLatLng = camera.screenOffsetToLatLng(newScreenOffset);
 
     setState(() {
       _overlay = _overlay!.copyWith(position: newLatLng);
@@ -486,6 +499,33 @@ class _MapScreenState extends State<MapScreen> {
         title: const Text('Carte avec Overlay'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
+          // Menu pour changer le style de carte
+          PopupMenuButton<MapStyle>(
+            icon: const Icon(Icons.map),
+            tooltip: 'Style de carte',
+            onSelected: (MapStyle style) {
+              setState(() {
+                _currentMapStyle = style;
+              });
+            },
+            itemBuilder: (BuildContext context) {
+              return MapStyle.values.map((MapStyle style) {
+                return PopupMenuItem<MapStyle>(
+                  value: style,
+                  child: Row(
+                    children: [
+                      Icon(
+                        _currentMapStyle == style ? Icons.check : Icons.map_outlined,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(style.displayName),
+                    ],
+                  ),
+                );
+              }).toList();
+            },
+          ),
           if (_overlay != null)
             IconButton(
               icon: const Icon(Icons.image),
@@ -556,7 +596,7 @@ class _MapScreenState extends State<MapScreen> {
             ),
             children: [
               TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                urlTemplate: _currentMapStyle.urlTemplate,
                 userAgentPackageName: 'com.example.flutter_map_overlay',
               ),
               if (_overlay != null)

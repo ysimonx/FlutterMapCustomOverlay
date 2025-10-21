@@ -324,12 +324,17 @@ Map<String, dynamic> toJson() {
 
 Flutter_map fournit des méthodes natives - **toujours les utiliser**:
 ```dart
-// Géographique → Écran
-Point screenPoint = camera.latLngToScreenPoint(latLng);
+// Géographique → Écran (retourne Offset depuis flutter_map 8.x)
+Offset screenOffset = camera.latLngToScreenOffset(latLng);
 
-// Écran → Géographique
-LatLng latLng = camera.pointToLatLng(screenPoint);
+// Écran → Géographique (accepte Offset depuis flutter_map 8.x)
+LatLng latLng = camera.screenOffsetToLatLng(screenOffset);
 ```
+
+**Note**: Dans flutter_map 8.x, les API ont changé:
+- `Point<double>` a été remplacé par `Offset`
+- `latLngToScreenPoint` → `latLngToScreenOffset`
+- `pointToLatLng` → `screenOffsetToLatLng`
 
 **Ne jamais** utiliser de formules Mercator approximatives.
 

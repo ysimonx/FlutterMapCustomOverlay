@@ -11,11 +11,11 @@ dependencies:
     sdk: flutter
 
   # Carte OpenStreetMap
-  flutter_map: ^7.0.2
+  flutter_map: ^8.2.2
   latlong2: ^0.9.1
 
   # Sélection de fichiers
-  file_picker: ^8.0.0+1
+  file_picker: ^10.3.3
 
   # Gestion d'images
   image: ^4.1.7
@@ -27,15 +27,15 @@ dependencies:
   path_provider: ^2.1.2
 
   # Permissions
-  permission_handler: ^11.3.0
+  permission_handler: ^12.0.1
 
   # Géolocalisation
-  geolocator: ^11.0.0
+  geolocator: ^14.0.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
+  flutter_lints: ^6.0.0
 
 flutter:
   uses-material-design: true
